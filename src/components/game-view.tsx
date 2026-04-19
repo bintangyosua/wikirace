@@ -6,6 +6,7 @@ import { useGameStream } from "@/hooks/use-game-stream";
 import { GameHeader } from "@/components/game-header";
 import { ArticleRenderer } from "@/components/article-renderer";
 import { PlayerSidebar } from "@/components/player-sidebar";
+import { PlayerCard } from "@/components/player-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,9 @@ import {
   Trophy,
   Share2,
   ArrowRight,
+  Users,
+  X,
+  ChevronDown,
 } from "lucide-react";
 
 interface GameViewProps {
@@ -42,7 +46,7 @@ export function GameView({ roomId }: GameViewProps) {
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
   const [navigating, setNavigating] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // For link-join flow: user needs to enter name
   const [needsName, setNeedsName] = useState(false);
@@ -438,19 +442,22 @@ export function GameView({ roomId }: GameViewProps) {
               </Button>
             )}
 
-            {/* Toggle Sidebar (mobile) */}
-            <Button
-              variant="ghost"
-              size="icon"
+            {/* Toggle Players Panel (mobile) — big tap target */}
+            <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden shrink-0"
+              className="lg:hidden shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border/40 bg-card/60 hover:bg-card active:scale-95 transition-all min-h-[44px] min-w-[44px]"
+              aria-label="Toggle players panel"
             >
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <rect x="2" y="4" width="16" height="2" rx="1" fill="currentColor"/>
-                <rect x="2" y="9" width="16" height="2" rx="1" fill="currentColor"/>
-                <rect x="2" y="14" width="16" height="2" rx="1" fill="currentColor"/>
-              </svg>
-            </Button>
+              <Users className="size-4 text-muted-foreground" />
+              <span className="text-sm font-medium">
+                {Object.keys(room.players).length}
+              </span>
+              <ChevronDown
+                className={`size-3.5 text-muted-foreground transition-transform duration-200 ${
+                  sidebarOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
           </div>
 
           {/* Connection indicator */}
@@ -459,6 +466,55 @@ export function GameView({ roomId }: GameViewProps) {
               <WifiOff className="size-3" />
               Reconnecting...
             </div>
+          )}
+        </div>
+
+        {/* Mobile Players Panel — slides down from top as overlay */}
+        <div className="lg:hidden relative">
+          {sidebarOpen && (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-200"
+                onClick={() => setSidebarOpen(false)}
+                style={{ top: 0 }}
+              />
+
+              {/* Panel */}
+              <div
+                className="absolute left-0 right-0 z-50 max-h-[60vh] overflow-y-auto border-b border-border/40 bg-background/95 backdrop-blur-xl shadow-2xl shadow-black/20 rounded-b-2xl animate-in slide-in-from-top duration-300"
+              >
+                {/* Panel header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border/20 sticky top-0 bg-background/90 backdrop-blur-sm z-10">
+                  <div className="flex items-center gap-2">
+                    <Users className="size-4 text-primary" />
+                    <span className="text-sm font-semibold">Players</span>
+                    <span className="text-xs text-muted-foreground">({Object.keys(room.players).length})</span>
+                  </div>
+                  <button
+                    onClick={() => setSidebarOpen(false)}
+                    className="flex items-center justify-center size-9 rounded-lg hover:bg-muted/60 active:scale-95 transition-all"
+                    aria-label="Close players panel"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </div>
+
+                {/* Player cards */}
+                <div className="p-3 space-y-2">
+                  {Object.values(room.players).map((p) => (
+                    <PlayerCard
+                      key={p.id}
+                      player={p}
+                      isCurrentUser={p.id === playerId}
+                      isHost={p.id === room.hostId}
+                      targetPage={room.targetPage}
+                      gameStatus={room.status}
+                    />
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </div>
 
@@ -472,14 +528,8 @@ export function GameView({ roomId }: GameViewProps) {
         </div>
       </div>
 
-      {/* Sidebar */}
-      <div
-        className={`shrink-0 w-72 border-l border-border/40 bg-background/50 backdrop-blur-sm transition-all duration-300 ${
-          sidebarOpen
-            ? "translate-x-0"
-            : "translate-x-full absolute right-0 top-0 h-full z-50 lg:translate-x-0 lg:relative"
-        }`}
-      >
+      {/* Desktop Sidebar — always visible on lg+ */}
+      <div className="hidden lg:block shrink-0 w-72 border-l border-border/40 bg-background/50 backdrop-blur-sm">
         <PlayerSidebar
           players={room.players}
           currentPlayerId={playerId}
