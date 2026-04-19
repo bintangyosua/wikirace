@@ -49,71 +49,71 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
+  --background: oklch(0.985 0.002 250);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: oklch(0.45 0.18 260);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --secondary: oklch(0.96 0.005 260);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --muted: oklch(0.96 0.005 260);
+  --muted-foreground: oklch(0.48 0 0);
+  --accent: oklch(0.96 0.005 260);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: oklch(0.9 0.005 260);
+  --input: oklch(0.9 0.005 260);
+  --ring: oklch(0.45 0.18 260);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
+  --sidebar: oklch(0.975 0.002 260);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: oklch(0.45 0.18 260);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.96 0.005 260);
   --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-border: oklch(0.9 0.005 260);
+  --sidebar-ring: oklch(0.45 0.18 260);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.12 0.01 270);
+  --foreground: oklch(0.93 0.01 270);
+  --card: oklch(0.16 0.01 270);
+  --card-foreground: oklch(0.93 0.01 270);
+  --popover: oklch(0.16 0.01 270);
+  --popover-foreground: oklch(0.93 0.01 270);
+  --primary: oklch(0.65 0.2 265);
+  --primary-foreground: oklch(0.15 0.02 265);
+  --secondary: oklch(0.22 0.01 270);
+  --secondary-foreground: oklch(0.93 0.01 270);
+  --muted: oklch(0.22 0.01 270);
+  --muted-foreground: oklch(0.6 0.02 270);
+  --accent: oklch(0.22 0.01 270);
+  --accent-foreground: oklch(0.93 0.01 270);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar: oklch(0.14 0.01 270);
+  --sidebar-foreground: oklch(0.93 0.01 270);
+  --sidebar-primary: oklch(0.65 0.2 265);
+  --sidebar-primary-foreground: oklch(0.15 0.02 265);
+  --sidebar-accent: oklch(0.22 0.01 270);
+  --sidebar-accent-foreground: oklch(0.93 0.01 270);
+  --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.556 0 0);
 }
 
@@ -126,5 +126,505 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Wikipedia-Authentic Article Styling
+   Adapted from Wikipedia's actual Vector skin stylesheet
+   ═══════════════════════════════════════════════════════════ */
+
+.wiki-content {
+  font-family: "Linux Libertine", "Georgia", "Times", serif;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #202122;
+  word-wrap: break-word;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.wiki-title {
+  font-family: "Linux Libertine", "Georgia", "Times", serif;
+  font-size: 1.8rem;
+  font-weight: 400;
+  line-height: 1.3;
+  margin: 0 0 0.25em;
+  padding: 0;
+  border-bottom: 1px solid #a2a9b1;
+  overflow: visible;
+}
+
+/* ── Headings ────────────────────────────────────────────── */
+.wiki-content h2 {
+  font-family: "Linux Libertine", "Georgia", "Times", serif;
+  font-size: 1.5em;
+  font-weight: 400;
+  margin: 1em 0 0.25em;
+  padding: 0;
+  border-bottom: 1px solid #a2a9b1;
+  line-height: 1.3;
+  overflow: hidden;
+}
+
+.wiki-content h3 {
+  font-family: "Linux Libertine", "Georgia", "Times", serif;
+  font-size: 1.2em;
+  font-weight: bold;
+  margin: 0.3em 0 0;
+  line-height: 1.6;
+}
+
+.wiki-content h4 {
+  font-size: 1em;
+  font-weight: bold;
+  margin: 0.3em 0 0;
+}
+
+.wiki-content h5 {
+  font-size: 0.875em;
+  font-weight: bold;
+  margin: 0.3em 0 0;
+}
+
+/* ── Paragraphs ──────────────────────────────────────────── */
+.wiki-content p {
+  margin: 0.5em 0;
+  line-height: 1.6;
+}
+
+/* ── Links — Wikipedia blue ──────────────────────────────── */
+.wiki-content a {
+  color: #3366cc;
+  text-decoration: none;
+  cursor: pointer;
+  background: none;
+}
+
+.wiki-content a:hover {
+  text-decoration: underline;
+}
+
+.wiki-content a:active {
+  color: #faa700;
+}
+
+.wiki-content a.new,
+.wiki-content a.redlink {
+  color: #d33;
+}
+
+.wiki-content a.external {
+  color: #3366cc;
+}
+
+/* ── Lists ───────────────────────────────────────────────── */
+.wiki-content ul {
+  list-style-type: disc;
+  margin: 0.3em 0 0 1.6em;
+  padding: 0;
+}
+
+.wiki-content ol {
+  list-style-type: decimal;
+  margin: 0.3em 0 0 3.2em;
+  padding: 0;
+}
+
+.wiki-content li {
+  margin-bottom: 0.1em;
+}
+
+.wiki-content dl {
+  margin-top: 0.2em;
+  margin-bottom: 0.5em;
+}
+
+.wiki-content dt {
+  font-weight: bold;
+  margin-bottom: 0.1em;
+}
+
+.wiki-content dd {
+  margin-left: 1.6em;
+  margin-bottom: 0.1em;
+}
+
+/* ── Blockquotes ─────────────────────────────────────────── */
+.wiki-content blockquote {
+  padding: 0 40px;
+  margin: 0;
+}
+
+/* ── Tables — wikitable class ────────────────────────────── */
+.wiki-content table {
+  font-size: 100%;
+  color: #202122;
+  border-collapse: collapse;
+  margin: 1em 0;
+}
+
+.wiki-content table.wikitable,
+.wiki-content .wikitable {
+  background: #f8f9fa;
+  color: #202122;
+  margin: 1em 0;
+  border: 1px solid #a2a9b1;
+  border-collapse: collapse;
+}
+
+.wiki-content table.wikitable th,
+.wiki-content .wikitable th {
+  background: #eaecf0;
+  text-align: center;
+  border: 1px solid #a2a9b1;
+  padding: 0.2em 0.4em;
+  font-weight: bold;
+}
+
+.wiki-content table.wikitable td,
+.wiki-content .wikitable td {
+  border: 1px solid #a2a9b1;
+  padding: 0.2em 0.4em;
+}
+
+.wiki-content table.wikitable caption {
+  font-weight: bold;
+}
+
+/* Generic table — fallback */
+.wiki-content table th,
+.wiki-content table td {
+  padding: 0.2em 0.4em;
+  border: 1px solid #c8ccd1;
+}
+
+.wiki-content table th {
+  background: #eaecf0;
+  text-align: center;
+  font-weight: bold;
+}
+
+/* ── Infobox ─────────────────────────────────────────────── */
+.wiki-content .infobox {
+  border: 1px solid #a2a9b1;
+  border-spacing: 3px;
+  background-color: #f8f9fa;
+  color: #202122;
+  margin: 0.5em 0 0.5em 1em;
+  padding: 0.2em;
+  float: right;
+  clear: right;
+  font-size: 88%;
+  line-height: 1.5em;
+  max-width: 22em;
+  overflow: hidden;
+}
+
+.wiki-content .infobox caption,
+.wiki-content .infobox .infobox-title,
+.wiki-content .infobox .summary {
+  font-size: 125%;
+  font-weight: bold;
+  text-align: center;
+  padding: 0.2em;
+}
+
+.wiki-content .infobox th {
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: top;
+  background: transparent;
+  border: none;
+}
+
+.wiki-content .infobox td {
+  vertical-align: top;
+  border: none;
+}
+
+.wiki-content .infobox .infobox-image,
+.wiki-content .infobox .infobox-full-data {
+  text-align: center;
+}
+
+.wiki-content .infobox .infobox-below {
+  text-align: center;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.wiki-content .sidebar {
+  float: right;
+  clear: right;
+  margin: 0.5em 0 1em 1em;
+  width: 22em;
+  max-width: 22em;
+  background: #f8f9fa;
+  border: 1px solid #aaa;
+  padding: 0.2em;
+  border-spacing: 0.4em 0;
+  text-align: center;
+  line-height: 1.4em;
+  font-size: 88%;
+}
+
+/* ── Images & Thumbnails ─────────────────────────────────── */
+.wiki-content img {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+}
+
+.wiki-content .thumb {
+  margin: 0.5em 0 1.3em;
+  overflow: hidden;
+}
+
+.wiki-content .thumb.tright {
+  clear: right;
+  float: right;
+  margin: 0.5em 0 1.3em 1.4em;
+}
+
+.wiki-content .thumb.tleft {
+  clear: left;
+  float: left;
+  margin: 0.5em 1.4em 1.3em 0;
+}
+
+.wiki-content .thumb.tnone {
+  margin: 0.5em 0 1.3em;
+}
+
+.wiki-content .thumb.tcenter {
+  margin: 0.5em auto 1.3em;
+  text-align: center;
+}
+
+.wiki-content div.thumbinner {
+  border: 1px solid #c8ccd1;
+  padding: 3px;
+  background-color: #f8f9fa;
+  font-size: 94%;
+  text-align: center;
+  overflow: hidden;
+  min-width: 100px;
+}
+
+.wiki-content .thumbcaption {
+  border: none;
+  line-height: 1.4em;
+  padding: 3px;
+  font-size: 94%;
+  text-align: left;
+}
+
+.wiki-content .magnify {
+  display: none;
+}
+
+/* ── Figure ──────────────────────────────────────────────── */
+.wiki-content figure {
+  margin: 0.5em 0 1.3em;
+}
+
+.wiki-content figure[typeof~="mw:File/Thumb"],
+.wiki-content figure[typeof~="mw:File/Frame"] {
+  border: 1px solid #c8ccd1;
+  padding: 3px;
+  background-color: #f8f9fa;
+  font-size: 94%;
+  clear: right;
+  float: right;
+  margin: 0.5em 0 1.3em 1.4em;
+  max-width: 300px;
+}
+
+.wiki-content figure figcaption {
+  font-size: 94%;
+  line-height: 1.4em;
+  padding: 3px;
+}
+
+/* ── Table of contents ───────────────────────────────────── */
+.wiki-content .toc,
+.wiki-content .mw-parser-output > .toc {
+  border: 1px solid #a2a9b1;
+  background-color: #f8f9fa;
+  padding: 5px 10px;
+  font-size: 95%;
+  display: inline-block;
+  margin: 0 0 0.5em;
+}
+
+.wiki-content .toc h2,
+.wiki-content .toc .toctitle {
+  display: inline;
+  border: none;
+  padding: 0;
+  font-size: 100%;
+  font-weight: bold;
+}
+
+.wiki-content .toc ul {
+  list-style-type: none;
+  list-style-image: none;
+  margin-left: 0;
+  padding: 0;
+}
+
+.wiki-content .toc ul ul {
+  margin: 0 0 0 2em;
+}
+
+.wiki-content .toc li {
+  margin: 0;
+}
+
+.wiki-content .toc .tocnumber {
+  color: #202122;
+}
+
+.wiki-content .toctogglecheckbox,
+.wiki-content .toctogglelabel {
+  display: none;
+}
+
+/* ── Hatnotes / disambig ─────────────────────────────────── */
+.wiki-content .hatnote,
+.wiki-content .dablink,
+.wiki-content .rellink {
+  font-style: italic;
+  padding-left: 1.6em;
+  margin-bottom: 0.5em;
+  font-size: 95%;
+}
+
+/* ── Code / pre ──────────────────────────────────────────── */
+.wiki-content code {
+  color: #202122;
+  background: #f8f9fa;
+  border: 1px solid #eaecf0;
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-family: monospace, monospace;
+}
+
+.wiki-content pre {
+  padding: 1em;
+  border: 1px solid #eaecf0;
+  color: #202122;
+  background-color: #f8f9fa;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  font-family: monospace, monospace;
+}
+
+/* ── Superscript / subscript ─────────────────────────────── */
+.wiki-content sup,
+.wiki-content sub {
+  font-size: 80%;
+}
+
+/* ── Horizontal rule ─────────────────────────────────────── */
+.wiki-content hr {
+  border: none;
+  border-top: 1px solid #a2a9b1;
+  margin: 0.2em 0;
+}
+
+/* ── Quotebox / pull quotes ──────────────────────────────── */
+.wiki-content .quotebox {
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  border-left: 3px solid #a2a9b1;
+  background-color: #f8f9fa;
+}
+
+/* ── Categories / nav boxes — hide for gameplay ──────────── */
+.wiki-content .catlinks,
+.wiki-content .navbox,
+.wiki-content .navbox-inner,
+.wiki-content .sistersitebox,
+.wiki-content .portalbox,
+.wiki-content .noprint,
+.wiki-content .metadata,
+.wiki-content .mw-editsection,
+.wiki-content .mw-empty-elt,
+.wiki-content .reference,
+.wiki-content .reflist,
+.wiki-content .refbegin,
+.wiki-content .references,
+.wiki-content .mw-references-wrap,
+.wiki-content .spoken-wikipedia,
+.wiki-content .side-box,
+.wiki-content .ambox,
+.wiki-content .tmbox,
+.wiki-content .mbox-small,
+.wiki-content .authority-control,
+.wiki-content .mw-authority-control,
+.wiki-content .navbox-styles,
+.wiki-content .geo-default,
+.wiki-content .geo-dms,
+.wiki-content .geo-dec {
+  display: none !important;
+}
+
+/* ── Gallery ─────────────────────────────────────────────── */
+.wiki-content .gallery {
+  margin: 2px;
+  padding: 2px;
+}
+
+.wiki-content .gallerybox {
+  vertical-align: top;
+  display: inline-block;
+  margin: 2px;
+}
+
+.wiki-content .gallerybox .thumb {
+  margin: 0;
+}
+
+.wiki-content .gallerytext {
+  font-size: 94%;
+  padding: 2px 4px;
+  word-wrap: break-word;
+}
+
+/* ── Math ────────────────────────────────────────────────── */
+.wiki-content .mw-math-element {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* ── Clear floats ────────────────────────────────────────── */
+.wiki-content::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* ── Responsive: unstack on small screens ────────────────── */
+@media (max-width: 720px) {
+  .wiki-content .infobox,
+  .wiki-content .sidebar,
+  .wiki-content .thumb.tright,
+  .wiki-content .thumb.tleft,
+  .wiki-content figure[typeof~="mw:File/Thumb"],
+  .wiki-content figure[typeof~="mw:File/Frame"] {
+    float: none;
+    clear: both;
+    margin: 0.5em auto;
+    max-width: 100%;
+  }
+
+  .wiki-content .infobox {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .wiki-content div.thumbinner {
+    max-width: 100%;
   }
 }

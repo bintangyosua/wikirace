@@ -1,0 +1,195 @@
+"use client";
+
+import { useEffect, useRef, useCallback, useReducer } from "react";
+import type { GameEvent, SerializedRoom, Player } from "@/lib/types";
+
+// ─── State ────────────────────────────────────────────────
+export interface GameState {
+  room: SerializedRoom | null;
+  connected: boolean;
+  error: string | null;
+}
+
+type GameAction =
+  | { type: "SET_ROOM"; room: SerializedRoom }
+  | { type: "PLAYER_JOINED"; player: Player }
+  | {
+      type: "PLAYER_NAVIGATED";
+      playerId: string;
+      page: string;
+      steps: number;
+      path: string[];
+    }
+  | {
+      type: "PLAYER_FINISHED";
+      playerId: string;
+      finishTime: number;
+      steps: number;
+    }
+  | { type: "GAME_STARTED"; startTime: number }
+  | { type: "SET_CONNECTED"; connected: boolean }
+  | { type: "SET_ERROR"; error: string };
+
+function gameReducer(state: GameState, action: GameAction): GameState {
+  switch (action.type) {
+    case "SET_ROOM":
+      return { ...state, room: action.room, error: null };
+
+    case "PLAYER_JOINED":
+      if (!state.room) return state;
+      return {
+        ...state,
+        room: {
+          ...state.room,
+          players: {
+            ...state.room.players,
+            [action.player.id]: action.player,
+          },
+        },
+      };
+
+    case "PLAYER_NAVIGATED":
+      if (!state.room) return state;
+      return {
+        ...state,
+        room: {
+          ...state.room,
+          players: {
+            ...state.room.players,
+            [action.playerId]: {
+              ...state.room.players[action.playerId],
+              currentPage: action.page,
+              steps: action.steps,
+              path: action.path,
+            },
+          },
+        },
+      };
+
+    case "PLAYER_FINISHED":
+      if (!state.room) return state;
+      return {
+        ...state,
+        room: {
+          ...state.room,
+          players: {
+            ...state.room.players,
+            [action.playerId]: {
+              ...state.room.players[action.playerId],
+              finished: true,
+              finishTime: action.finishTime,
+              steps: action.steps,
+            },
+          },
+        },
+      };
+
+    case "GAME_STARTED":
+      if (!state.room) return state;
+      return {
+        ...state,
+        room: {
+          ...state.room,
+          status: "playing",
+          startTime: action.startTime,
+        },
+      };
+
+    case "SET_CONNECTED":
+      return { ...state, connected: action.connected };
+
+    case "SET_ERROR":
+      return { ...state, error: action.error };
+
+    default:
+      return state;
+  }
+}
+
+// ─── Hook ─────────────────────────────────────────────────
+export function useGameStream(roomId: string) {
+  const [state, dispatch] = useReducer(gameReducer, {
+    room: null,
+    connected: false,
+    error: null,
+  });
+
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const connect = useCallback(() => {
+    // Close existing connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    const es = new EventSource(`/api/rooms/${roomId}/stream`);
+    eventSourceRef.current = es;
+
+    es.onopen = () => {
+      dispatch({ type: "SET_CONNECTED", connected: true });
+    };
+
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as GameEvent;
+
+        switch (data.type) {
+          case "full_state":
+            dispatch({ type: "SET_ROOM", room: data.room });
+            break;
+          case "player_joined":
+            dispatch({ type: "PLAYER_JOINED", player: data.player });
+            break;
+          case "player_navigated":
+            dispatch({
+              type: "PLAYER_NAVIGATED",
+              playerId: data.playerId,
+              page: data.page,
+              steps: data.steps,
+              path: data.path,
+            });
+            break;
+          case "player_finished":
+            dispatch({
+              type: "PLAYER_FINISHED",
+              playerId: data.playerId,
+              finishTime: data.finishTime,
+              steps: data.steps,
+            });
+            break;
+          case "game_started":
+            dispatch({ type: "GAME_STARTED", startTime: data.startTime });
+            break;
+        }
+      } catch (err) {
+        console.error("Failed to parse SSE event:", err);
+      }
+    };
+
+    es.onerror = () => {
+      dispatch({ type: "SET_CONNECTED", connected: false });
+      es.close();
+
+      // Reconnect after 2 seconds
+      reconnectTimeoutRef.current = setTimeout(() => {
+        connect();
+      }, 2000);
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    connect();
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+    };
+  }, [connect]);
+
+  return state;
+}
