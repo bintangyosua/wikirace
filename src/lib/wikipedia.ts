@@ -2,11 +2,62 @@ import type { WikiArticle } from "./types";
 
 const WIKI_API = "https://en.wikipedia.org/w/api.php";
 
+// Wikipedia requires a descriptive User-Agent to avoid aggressive rate-limiting
+const WIKI_HEADERS = {
+  "User-Agent": "WikiRace/1.0 (https://github.com/wikirace; multiplayer game)",
+  "Api-User-Agent": "WikiRace/1.0",
+};
+
+// ─── In-memory article cache ──────────────────────────────
+// Persisted across hot reloads via globalThis
+const globalCache = globalThis as typeof globalThis & {
+  __wikiArticleCache?: Map<string, { article: WikiArticle; cachedAt: number }>;
+};
+
+if (!globalCache.__wikiArticleCache) {
+  globalCache.__wikiArticleCache = new Map();
+}
+
+const articleCache = globalCache.__wikiArticleCache;
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const MAX_CACHE_SIZE = 200; // max entries to prevent memory leak
+
+function getCachedArticle(title: string): WikiArticle | null {
+  const key = title.trim().toLowerCase();
+  const entry = articleCache.get(key);
+  if (!entry) return null;
+
+  // Check if expired
+  if (Date.now() - entry.cachedAt > CACHE_TTL) {
+    articleCache.delete(key);
+    return null;
+  }
+
+  return entry.article;
+}
+
+function setCachedArticle(title: string, article: WikiArticle): void {
+  const key = title.trim().toLowerCase();
+
+  // Evict oldest entries if cache is full
+  if (articleCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = articleCache.keys().next().value;
+    if (firstKey) articleCache.delete(firstKey);
+  }
+
+  articleCache.set(key, { article, cachedAt: Date.now() });
+}
+
 /**
  * Fetch and parse a Wikipedia article by title.
  * Uses action=parse to get rendered HTML.
+ * Results are cached in-memory for 30 minutes.
  */
 export async function fetchArticle(title: string): Promise<WikiArticle> {
+  // Check cache first
+  const cached = getCachedArticle(title);
+  if (cached) return cached;
+
   const params = new URLSearchParams({
     action: "parse",
     page: title,
@@ -18,7 +69,8 @@ export async function fetchArticle(title: string): Promise<WikiArticle> {
   });
 
   const res = await fetch(`${WIKI_API}?${params}`, {
-    next: { revalidate: 3600 }, // cache for 1 hour
+    headers: WIKI_HEADERS,
+    next: { revalidate: 3600 }, // Next.js cache for 1 hour
   });
 
   if (!res.ok) {
@@ -37,10 +89,15 @@ export async function fetchArticle(title: string): Promise<WikiArticle> {
   // Clean the title (remove HTML tags that Wikipedia sometimes includes)
   const cleanTitle = displayTitle.replace(/<[^>]*>/g, "");
 
-  return {
+  const article: WikiArticle = {
     title: cleanTitle,
     html,
   };
+
+  // Store in cache
+  setCachedArticle(title, article);
+
+  return article;
 }
 
 /**
@@ -61,6 +118,7 @@ export async function getRandomArticles(count: number): Promise<string[]> {
   });
 
   const res = await fetch(`${WIKI_API}?${params}`, {
+    headers: WIKI_HEADERS,
     cache: "no-store",
   });
 
@@ -113,6 +171,7 @@ export async function searchArticles(query: string): Promise<SearchResult[]> {
   });
 
   const res = await fetch(`${WIKI_API}?${params}`, {
+    headers: WIKI_HEADERS,
     next: { revalidate: 300 },
   });
 
@@ -143,4 +202,3 @@ export async function searchArticles(query: string): Promise<SearchResult[]> {
       description: page.extract?.trim() || "",
     }));
 }
-
