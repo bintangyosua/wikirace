@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WikiArticle } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 
@@ -65,6 +65,46 @@ export function ArticleRenderer({
     }
   }, [article]);
 
+  // Anti-cheat: replace text nodes with CSS-rendered spans (unsearchable by Find in Page)
+  useLayoutEffect(() => {
+    if (!contentRef.current || !article) return;
+
+    const walker = document.createTreeWalker(
+      contentRef.current,
+      NodeFilter.SHOW_TEXT
+    );
+
+    // Collect all text nodes first (can't modify DOM while walking)
+    const textNodes: Text[] = [];
+    let node: Node | null;
+    while ((node = walker.nextNode())) {
+      textNodes.push(node as Text);
+    }
+
+    for (const textNode of textNodes) {
+      const text = textNode.textContent;
+      if (!text || !text.trim()) continue;
+
+      const span = document.createElement('span');
+      span.setAttribute('data-text', text);
+      textNode.parentNode?.replaceChild(span, textNode);
+    }
+  }, [article]);
+
+  // Block Ctrl+F / Cmd+F browser search while article is displayed
+  useEffect(() => {
+    if (!article) return;
+
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('keydown', handler, { capture: true });
+    return () => window.removeEventListener('keydown', handler, { capture: true });
+  }, [article]);
+
   // Intercept link clicks
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
@@ -80,6 +120,13 @@ export function ArticleRenderer({
 
       const href = anchor.getAttribute("href");
       if (!href) return;
+
+      // Handle hash-only links (scroll within the article)
+      if (href.startsWith("#")) {
+        const el = contentRef.current?.querySelector(href);
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
 
       // Only handle internal /wiki/ links
       const wikiMatch = href.match(/^\/wiki\/([^#]+)/);
@@ -101,9 +148,21 @@ export function ArticleRenderer({
         return;
       }
 
+      // Skip self-referencing links (e.g. /wiki/Current_Page#section)
+      const normalise = (s: string) => s.replace(/_/g, " ").toLowerCase().trim();
+      if (normalise(title) === normalise(currentPage)) {
+        // If the link has a hash, scroll to that section instead
+        const hashMatch = href.match(/#(.+)$/);
+        if (hashMatch) {
+          const el = contentRef.current?.querySelector(`#${CSS.escape(hashMatch[1])}`);
+          if (el) el.scrollIntoView({ behavior: "smooth" });
+        }
+        return;
+      }
+
       onNavigate(title);
     },
-    [onNavigate, disabled]
+    [onNavigate, disabled, currentPage]
   );
 
   if (loading) {
@@ -132,6 +191,9 @@ export function ArticleRenderer({
       ref={contentRef}
       className="wiki-content overflow-y-auto"
       onClick={handleClick}
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+      style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}
     >
       <h1 className="wiki-title">{article.title}</h1>
       <div dangerouslySetInnerHTML={{ __html: article.html }} />

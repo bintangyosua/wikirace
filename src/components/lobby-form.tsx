@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import {
   joinRoomSchema,
   getFieldErrors,
 } from "@/lib/validations";
-import { Globe, Users, Zap, ArrowRight, Loader2, Shuffle, AlertCircle } from "lucide-react";
+import { Globe, Users, Zap, ArrowRight, Loader2, Shuffle, AlertCircle, LogIn } from "lucide-react";
 
 /** Inline field error shown below each input */
 function FieldError({ message }: { message?: string }) {
@@ -42,6 +42,19 @@ export function LobbyForm() {
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+
+  // Check for an existing active room session
+  useEffect(() => {
+    const storedRoomId = sessionStorage.getItem("wikirace_room_id");
+    const storedName = sessionStorage.getItem("wikirace_player_name");
+    if (storedRoomId) {
+      setActiveRoomId(storedRoomId);
+    }
+    if (storedName) {
+      setPlayerName(storedName);
+    }
+  }, []);
 
   const clearErrors = () => {
     setFieldErrors({});
@@ -100,6 +113,7 @@ export function LobbyForm() {
       }
 
       const data = await res.json();
+      sessionStorage.setItem("wikirace_room_id", data.roomId);
       router.push(`/room/${data.roomId}`);
     } catch (err) {
       setServerError(
@@ -145,6 +159,7 @@ export function LobbyForm() {
         throw new Error(data.error || "Failed to join room");
       }
 
+      sessionStorage.setItem("wikirace_room_id", result.data.roomCode);
       router.push(`/room/${result.data.roomCode}`);
     } catch (err) {
       setServerError(
@@ -156,6 +171,44 @@ export function LobbyForm() {
 
   return (
     <div className="flex flex-col items-center gap-8">
+      {/* Return to Active Room Banner */}
+      {activeRoomId && (
+        <div className="w-full max-w-md animate-in slide-in-from-top-2 fade-in duration-300">
+          <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+            <div className="flex items-center justify-center size-10 rounded-lg bg-primary/10 shrink-0">
+              <LogIn className="size-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">You have an active room</p>
+              <p className="text-xs text-muted-foreground">
+                Room <span className="font-mono font-bold text-primary">{activeRoomId}</span>
+              </p>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  sessionStorage.removeItem("wikirace_room_id");
+                  setActiveRoomId(null);
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground h-8 px-2"
+              >
+                Dismiss
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => router.push(`/room/${activeRoomId}`)}
+                className="gap-1.5 h-8"
+              >
+                Return
+                <ArrowRight className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Mode Toggle */}
       <div className="flex gap-1 rounded-lg bg-muted p-1">
         <button

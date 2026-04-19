@@ -74,6 +74,9 @@ export function GameView({ roomId }: GameViewProps) {
   useEffect(() => {
     if (!room || !playerId || !playerName || needsName) return;
 
+    // Store active room ID so lobby can offer "Return to Room"
+    sessionStorage.setItem("wikirace_room_id", roomId);
+
     // Already in the room
     if (room.players[playerId]) return;
 
@@ -141,6 +144,7 @@ export function GameView({ roomId }: GameViewProps) {
         throw new Error(data.error || "Failed to join room");
       }
 
+      sessionStorage.setItem("wikirace_room_id", roomId);
       setPlayerId(id);
       setPlayerName(result.data.name);
       setNeedsName(false);
