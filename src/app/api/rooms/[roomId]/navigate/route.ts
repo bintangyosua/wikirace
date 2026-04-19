@@ -22,7 +22,7 @@ export async function POST(
     );
   }
 
-  const room = getRoom(roomId);
+  const room = await getRoom(roomId);
 
   if (!room) {
     return Response.json({ error: "Room not found" }, { status: 404 });
@@ -35,7 +35,7 @@ export async function POST(
     );
   }
 
-  const player = updatePlayerNavigation(roomId, playerId, page);
+  const player = await updatePlayerNavigation(roomId, playerId, page);
 
   if (!player) {
     return Response.json(
@@ -44,9 +44,12 @@ export async function POST(
     );
   }
 
+  // Re-fetch room for accurate state after navigation
+  const updatedRoom = await getRoom(roomId);
+
   return Response.json({
     player,
     finished: player.finished,
-    room: serializeRoom(room),
+    room: updatedRoom ? serializeRoom(updatedRoom) : null,
   });
 }

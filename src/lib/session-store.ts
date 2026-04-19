@@ -1,68 +1,106 @@
 import type { GameEvent, Player, Room, SerializedRoom } from "./types";
 import { generateRoomId } from "./game-utils";
+import { connectDB } from "./mongodb";
+import { RoomModel } from "./models/room";
 
-// ─── In-Memory Store ──────────────────────────────────────
-// Using global to persist across hot reloads in development
-const globalForStore = globalThis as unknown as {
-  __rooms?: Map<string, Room>;
+// ─── SSE Subscribers (in-memory only — can't persist connections) ──
+const globalForSubs = globalThis as unknown as {
   __subscribers?: Map<string, Set<ReadableStreamDefaultController>>;
 };
 
-if (!globalForStore.__rooms) {
-  globalForStore.__rooms = new Map();
-}
-if (!globalForStore.__subscribers) {
-  globalForStore.__subscribers = new Map();
+if (!globalForSubs.__subscribers) {
+  globalForSubs.__subscribers = new Map();
 }
 
-const rooms = globalForStore.__rooms;
-const subscribers = globalForStore.__subscribers;
+const subscribers = globalForSubs.__subscribers;
+
+// ─── Helper: Convert Mongoose doc → Room type ─────────────
+function docToRoom(doc: InstanceType<typeof RoomModel>): Room {
+  const players = new Map<string, Player>();
+  if (doc.players) {
+    for (const [key, val] of doc.players.entries()) {
+      players.set(key, {
+        id: val.id,
+        name: val.name,
+        currentPage: val.currentPage,
+        path: [...val.path],
+        finished: val.finished,
+        gaveUp: val.gaveUp,
+        finishTime: val.finishTime,
+        steps: val.steps,
+      });
+    }
+  }
+
+  return {
+    id: doc.roomId,
+    startPage: doc.startPage,
+    targetPage: doc.targetPage,
+    startTime: doc.startTime,
+    players,
+    status: doc.status,
+    hostId: doc.hostId,
+  };
+}
 
 // ─── Room CRUD ────────────────────────────────────────────
 
-export function createRoom(
+export async function createRoom(
   startPage: string,
   targetPage: string,
   hostId: string
-): Room {
+): Promise<Room> {
+  await connectDB();
+
   let id = generateRoomId();
   // Ensure unique ID
-  while (rooms.has(id)) {
+  while (await RoomModel.exists({ roomId: id })) {
     id = generateRoomId();
   }
 
-  const room: Room = {
-    id,
+  const doc = await RoomModel.create({
+    roomId: id,
     startPage,
     targetPage,
     startTime: null,
     players: new Map(),
     status: "waiting",
     hostId,
-  };
+  });
 
-  rooms.set(id, room);
   subscribers.set(id, new Set());
 
-  return room;
+  return docToRoom(doc);
 }
 
-export function getRoom(roomId: string): Room | undefined {
-  return rooms.get(roomId);
+export async function getRoom(roomId: string): Promise<Room | undefined> {
+  await connectDB();
+  const doc = await RoomModel.findOne({ roomId });
+  if (!doc) return undefined;
+  return docToRoom(doc);
 }
 
-export function deleteRoom(roomId: string): void {
-  rooms.delete(roomId);
+export async function deleteRoom(roomId: string): Promise<void> {
+  await connectDB();
+  await RoomModel.deleteOne({ roomId });
   subscribers.delete(roomId);
 }
 
 // ─── Player Management ───────────────────────────────────
 
-export function addPlayer(roomId: string, player: Player): Room | null {
-  const room = rooms.get(roomId);
-  if (!room) return null;
+export async function addPlayer(
+  roomId: string,
+  player: Player
+): Promise<Room | null> {
+  await connectDB();
 
-  room.players.set(player.id, player);
+  const doc = await RoomModel.findOneAndUpdate(
+    { roomId },
+    { $set: { [`players.${player.id}`]: player } },
+    { new: true }
+  );
+
+  if (!doc) return null;
 
   // Broadcast to other players
   broadcastToRoom(roomId, {
@@ -70,41 +108,48 @@ export function addPlayer(roomId: string, player: Player): Room | null {
     player,
   });
 
-  return room;
+  return docToRoom(doc);
 }
 
-export function startGame(roomId: string): Room | null {
-  const room = rooms.get(roomId);
-  if (!room || room.status !== "waiting") return null;
+export async function startGame(roomId: string): Promise<Room | null> {
+  await connectDB();
 
-  room.status = "playing";
-  room.startTime = Date.now();
+  const doc = await RoomModel.findOne({ roomId });
+  if (!doc || doc.status !== "waiting") return null;
 
-  // Set all players to start page
-  for (const player of room.players.values()) {
-    player.currentPage = room.startPage;
-    player.path = [room.startPage];
+  const startTime = Date.now();
+  doc.status = "playing";
+  doc.startTime = startTime;
+
+  // Reset all players to start page
+  for (const [, player] of doc.players.entries()) {
+    player.currentPage = doc.startPage;
+    player.path = [doc.startPage];
     player.steps = 0;
     player.gaveUp = false;
   }
 
+  await doc.save();
+
   broadcastToRoom(roomId, {
     type: "game_started",
-    startTime: room.startTime,
+    startTime,
   });
 
-  return room;
+  return docToRoom(doc);
 }
 
-export function updatePlayerNavigation(
+export async function updatePlayerNavigation(
   roomId: string,
   playerId: string,
   newPage: string
-): Player | null {
-  const room = rooms.get(roomId);
-  if (!room) return null;
+): Promise<Player | null> {
+  await connectDB();
 
-  const player = room.players.get(playerId);
+  const doc = await RoomModel.findOne({ roomId });
+  if (!doc) return null;
+
+  const player = doc.players.get(playerId);
   if (!player || player.finished) return null;
 
   player.currentPage = newPage;
@@ -120,21 +165,34 @@ export function updatePlayerNavigation(
   });
 
   // Check if player reached target
-  if (newPage === room.targetPage) {
-    return finishPlayer(roomId, playerId);
+  if (newPage === doc.targetPage) {
+    return finishPlayerInternal(doc, playerId);
   }
 
-  return player;
+  await doc.save();
+
+  return {
+    id: player.id,
+    name: player.name,
+    currentPage: player.currentPage,
+    path: [...player.path],
+    finished: player.finished,
+    gaveUp: player.gaveUp,
+    finishTime: player.finishTime,
+    steps: player.steps,
+  };
 }
 
-export function goBackPlayer(
+export async function goBackPlayer(
   roomId: string,
   playerId: string
-): Player | null {
-  const room = rooms.get(roomId);
-  if (!room) return null;
+): Promise<Player | null> {
+  await connectDB();
 
-  const player = room.players.get(playerId);
+  const doc = await RoomModel.findOne({ roomId });
+  if (!doc) return null;
+
+  const player = doc.players.get(playerId);
   if (!player || player.finished) return null;
 
   // Can't go back past the start page
@@ -144,6 +202,8 @@ export function goBackPlayer(
   player.currentPage = player.path[player.path.length - 1];
   player.steps = player.path.length - 1;
 
+  await doc.save();
+
   broadcastToRoom(roomId, {
     type: "player_navigated",
     playerId,
@@ -152,23 +212,30 @@ export function goBackPlayer(
     path: [...player.path],
   });
 
-  return player;
+  return {
+    id: player.id,
+    name: player.name,
+    currentPage: player.currentPage,
+    path: [...player.path],
+    finished: player.finished,
+    gaveUp: player.gaveUp,
+    finishTime: player.finishTime,
+    steps: player.steps,
+  };
 }
 
-export function finishPlayer(
-  roomId: string,
+// Internal finish — used when player reaches target during navigation
+async function finishPlayerInternal(
+  doc: InstanceType<typeof RoomModel>,
   playerId: string
-): Player | null {
-  const room = rooms.get(roomId);
-  if (!room || !room.startTime) return null;
-
-  const player = room.players.get(playerId);
-  if (!player || player.finished) return null;
+): Promise<Player | null> {
+  const player = doc.players.get(playerId);
+  if (!player || player.finished || !doc.startTime) return null;
 
   player.finished = true;
-  player.finishTime = Date.now() - room.startTime;
+  player.finishTime = Date.now() - doc.startTime;
 
-  broadcastToRoom(roomId, {
+  broadcastToRoom(doc.roomId, {
     type: "player_finished",
     playerId,
     finishTime: player.finishTime,
@@ -176,61 +243,97 @@ export function finishPlayer(
   });
 
   // Check if all players finished
-  const allFinished = Array.from(room.players.values()).every(
+  const allFinished = Array.from(doc.players.values()).every(
     (p) => p.finished
   );
   if (allFinished) {
-    room.status = "finished";
+    doc.status = "finished";
   }
 
-  return player;
+  await doc.save();
+
+  return {
+    id: player.id,
+    name: player.name,
+    currentPage: player.currentPage,
+    path: [...player.path],
+    finished: player.finished,
+    gaveUp: player.gaveUp,
+    finishTime: player.finishTime,
+    steps: player.steps,
+  };
 }
 
-export function giveUpPlayer(
+export async function finishPlayer(
   roomId: string,
   playerId: string
-): Player | null {
-  const room = rooms.get(roomId);
-  if (!room || !room.startTime) return null;
+): Promise<Player | null> {
+  await connectDB();
+  const doc = await RoomModel.findOne({ roomId });
+  if (!doc) return null;
+  return finishPlayerInternal(doc, playerId);
+}
 
-  const player = room.players.get(playerId);
+export async function giveUpPlayer(
+  roomId: string,
+  playerId: string
+): Promise<Player | null> {
+  await connectDB();
+
+  const doc = await RoomModel.findOne({ roomId });
+  if (!doc || !doc.startTime) return null;
+
+  const player = doc.players.get(playerId);
   if (!player || player.finished) return null;
 
   player.finished = true;
   player.gaveUp = true;
   player.finishTime = null;
 
-  broadcastToRoom(roomId, {
+  broadcastToRoom(doc.roomId, {
     type: "player_gave_up",
     playerId,
   });
 
   // Check if all players finished
-  const allFinished = Array.from(room.players.values()).every(
+  const allFinished = Array.from(doc.players.values()).every(
     (p) => p.finished
   );
   if (allFinished) {
-    room.status = "finished";
+    doc.status = "finished";
   }
 
-  return player;
+  await doc.save();
+
+  return {
+    id: player.id,
+    name: player.name,
+    currentPage: player.currentPage,
+    path: [...player.path],
+    finished: player.finished,
+    gaveUp: player.gaveUp,
+    finishTime: player.finishTime,
+    steps: player.steps,
+  };
 }
 
-export function restartRoom(
+export async function restartRoom(
   roomId: string,
   startPage: string,
   targetPage: string
-): Room | null {
-  const room = rooms.get(roomId);
-  if (!room) return null;
+): Promise<Room | null> {
+  await connectDB();
 
-  room.status = "waiting";
-  room.startTime = null;
-  room.startPage = startPage;
-  room.targetPage = targetPage;
+  const doc = await RoomModel.findOne({ roomId });
+  if (!doc) return null;
+
+  doc.status = "waiting";
+  doc.startTime = null;
+  doc.startPage = startPage;
+  doc.targetPage = targetPage;
 
   // Reset all players' game state
-  for (const player of room.players.values()) {
+  for (const [, player] of doc.players.entries()) {
     player.currentPage = startPage;
     player.path = [startPage];
     player.steps = 0;
@@ -238,6 +341,10 @@ export function restartRoom(
     player.gaveUp = false;
     player.finishTime = null;
   }
+
+  await doc.save();
+
+  const room = docToRoom(doc);
 
   broadcastToRoom(roomId, {
     type: "game_restarted",
@@ -261,7 +368,7 @@ export function serializeRoom(room: Room): SerializedRoom {
   };
 }
 
-// ─── SSE Subscriptions ───────────────────────────────────
+// ─── SSE Subscriptions (in-memory) ───────────────────────
 
 export function addSubscriber(
   roomId: string,

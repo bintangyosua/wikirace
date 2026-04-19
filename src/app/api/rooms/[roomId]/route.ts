@@ -12,7 +12,7 @@ export async function GET(
   { params }: { params: Promise<{ roomId: string }> }
 ) {
   const { roomId } = await params;
-  const room = getRoom(roomId);
+  const room = await getRoom(roomId);
 
   if (!room) {
     return Response.json({ error: "Room not found" }, { status: 404 });
@@ -41,7 +41,7 @@ export async function POST(
     );
   }
 
-  const room = getRoom(roomId);
+  const room = await getRoom(roomId);
 
   if (!room) {
     return Response.json({ error: "Room not found" }, { status: 404 });
@@ -70,7 +70,7 @@ export async function POST(
     steps: 0,
   };
 
-  addPlayer(roomId, player);
+  await addPlayer(roomId, player);
 
   return Response.json({ room: serializeRoom(room) });
 }

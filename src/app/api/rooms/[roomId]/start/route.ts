@@ -15,7 +15,7 @@ export async function POST(
   const body = await request.json();
   const { playerId } = body;
 
-  const room = getRoom(roomId);
+  const room = await getRoom(roomId);
 
   if (!room) {
     return Response.json({ error: "Room not found" }, { status: 404 });
@@ -35,7 +35,7 @@ export async function POST(
     );
   }
 
-  const updatedRoom = startGame(roomId);
+  const updatedRoom = await startGame(roomId);
 
   if (!updatedRoom) {
     return Response.json(

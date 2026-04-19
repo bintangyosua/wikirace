@@ -25,7 +25,7 @@ export async function POST(
     );
   }
 
-  const room = getRoom(roomId);
+  const room = await getRoom(roomId);
 
   if (!room) {
     return Response.json({ error: "Room not found" }, { status: 404 });
@@ -56,7 +56,7 @@ export async function POST(
     targetPage = articles[1];
   }
 
-  const updatedRoom = restartRoom(roomId, startPage, targetPage);
+  const updatedRoom = await restartRoom(roomId, startPage, targetPage);
 
   if (!updatedRoom) {
     return Response.json(

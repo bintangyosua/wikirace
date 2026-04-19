@@ -46,7 +46,7 @@ export async function POST(request: Request) {
       targetPage = articles[1];
     }
 
-    const room = createRoom(startPage, targetPage, hostId);
+    const room = await createRoom(startPage, targetPage, hostId);
 
     // Auto-join the host
     const hostPlayer: Player = {
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       steps: 0,
     };
 
-    addPlayer(room.id, hostPlayer);
+    await addPlayer(room.id, hostPlayer);
 
     return Response.json({
       roomId: room.id,
