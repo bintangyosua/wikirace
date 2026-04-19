@@ -5,6 +5,7 @@ export interface Player {
   currentPage: string;
   path: string[];
   finished: boolean;
+  gaveUp: boolean;
   finishTime: number | null; // elapsed ms from startTime
   steps: number; // path.length - 1
 }
@@ -49,7 +50,15 @@ export type GameEvent =
       finishTime: number;
       steps: number;
     }
+  | {
+      type: "player_gave_up";
+      playerId: string;
+    }
   | { type: "game_started"; startTime: number }
+  | {
+      type: "game_restarted";
+      room: SerializedRoom;
+    }
   | { type: "full_state"; room: SerializedRoom };
 
 // ─── API Request/Response types ───────────────────────────

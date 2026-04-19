@@ -65,6 +65,7 @@ export async function POST(
     currentPage: room.startPage,
     path: [room.startPage],
     finished: false,
+    gaveUp: false,
     finishTime: null,
     steps: 0,
   };

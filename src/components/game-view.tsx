@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useGameStream } from "@/hooks/use-game-stream";
 import { GameHeader } from "@/components/game-header";
 import { ArticleRenderer } from "@/components/article-renderer";
+import { ArticleSearch } from "@/components/article-search";
 import { PlayerSidebar } from "@/components/player-sidebar";
 import { PlayerCard } from "@/components/player-card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,16 @@ import { generatePlayerId } from "@/lib/game-utils";
 import { joinByLinkSchema } from "@/lib/validations";
 import { AlertCircle } from "lucide-react";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Copy,
   Check,
   Play,
@@ -32,6 +43,11 @@ import {
   Users,
   X,
   ChevronDown,
+  Flag,
+  Globe,
+  Shuffle,
+  Home,
+  Undo2,
 } from "lucide-react";
 
 interface GameViewProps {
@@ -48,7 +64,16 @@ export function GameView({ roomId }: GameViewProps) {
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
   const [navigating, setNavigating] = useState(false);
+  const [goingBack, setGoingBack] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [givingUp, setGivingUp] = useState(false);
+  const [showGiveUpDialog, setShowGiveUpDialog] = useState(false);
+
+  // Article selection state (for host in waiting room)
+  const [useCustomPages, setUseCustomPages] = useState(false);
+  const [editStartPage, setEditStartPage] = useState("");
+  const [editTargetPage, setEditTargetPage] = useState("");
+  const [restarting, setRestarting] = useState(false);
 
   // For link-join flow: user needs to enter name
   const [needsName, setNeedsName] = useState(false);
@@ -188,10 +213,27 @@ export function GameView({ roomId }: GameViewProps) {
   const handleStartGame = async () => {
     setStarting(true);
     try {
+      const body: Record<string, string> = { playerId };
+
+      // If host chose custom articles, restart room with new articles first
+      if (room?.hostId === playerId && useCustomPages && editStartPage && editTargetPage) {
+        await fetch(`/api/rooms/${roomId}/restart`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            playerId,
+            startPage: editStartPage,
+            targetPage: editTargetPage,
+          }),
+        });
+        // Small delay for state to propagate
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
       await fetch(`/api/rooms/${roomId}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerId }),
+        body: JSON.stringify(body),
       });
     } catch (err) {
       console.error("Failed to start game:", err);
@@ -230,6 +272,56 @@ export function GameView({ roomId }: GameViewProps) {
     },
     [navigating, room, roomId, playerId]
   );
+
+  const handleGiveUp = useCallback(async () => {
+    if (givingUp || !room || room.status !== "playing") return;
+
+    setShowGiveUpDialog(false);
+
+    setGivingUp(true);
+    try {
+      await fetch(`/api/rooms/${roomId}/giveup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId }),
+      });
+    } catch (err) {
+      console.error("Give up failed:", err);
+    } finally {
+      setGivingUp(false);
+    }
+  }, [givingUp, room, roomId, playerId]);
+
+  const handleGoBack = useCallback(async () => {
+    if (goingBack || navigating || !room || room.status !== "playing") return;
+
+    const me = room.players[playerId];
+    if (!me || me.finished || me.path.length <= 1) return;
+
+    setGoingBack(true);
+
+    // Optimistic update: go to previous page
+    const prevPage = me.path[me.path.length - 2];
+    setCurrentPage(prevPage);
+
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/back`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId }),
+      });
+
+      if (!res.ok) {
+        // Revert optimistic update
+        setCurrentPage(me.currentPage);
+      }
+    } catch (err) {
+      console.error("Go back failed:", err);
+      setCurrentPage(me.currentPage);
+    } finally {
+      setGoingBack(false);
+    }
+  }, [goingBack, navigating, room, roomId, playerId]);
 
   // ── Name Entry (join via link) ────────────────────────────
   if (needsName) {
@@ -367,17 +459,69 @@ export function GameView({ roomId }: GameViewProps) {
           </Button>
         </div>
 
-        {/* Route Preview */}
-        <div className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border/40 bg-card/50">
-          <p className="text-xs text-muted-foreground uppercase tracking-wider">
-            Race Route
-          </p>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary">{room.startPage}</Badge>
-            <span className="text-muted-foreground">→</span>
-            <Badge variant="outline">{room.targetPage}</Badge>
+        {/* Route Preview / Article Selection (host) */}
+        {isHost ? (
+          <div className="w-full max-w-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium">Race Route</p>
+              <button
+                type="button"
+                onClick={() => setUseCustomPages(!useCustomPages)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {useCustomPages ? (
+                  <>
+                    <Shuffle className="size-3" />
+                    Use current
+                  </>
+                ) : (
+                  <>
+                    <Globe className="size-3" />
+                    Change articles
+                  </>
+                )}
+              </button>
+            </div>
+
+            {useCustomPages ? (
+              <div className="space-y-3 rounded-xl border border-border/40 bg-card/50 p-4">
+                <ArticleSearch
+                  id="wait-start-article"
+                  label="Start Article"
+                  placeholder="Type to search..."
+                  value={editStartPage}
+                  onChange={setEditStartPage}
+                />
+                <ArticleSearch
+                  id="wait-target-article"
+                  label="Target Article"
+                  placeholder="Type to search..."
+                  value={editTargetPage}
+                  onChange={setEditTargetPage}
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border/40 bg-card/50">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">{room.startPage}</Badge>
+                  <span className="text-muted-foreground">→</span>
+                  <Badge variant="outline">{room.targetPage}</Badge>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 p-4 rounded-xl border border-border/40 bg-card/50">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">
+              Race Route
+            </p>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{room.startPage}</Badge>
+              <span className="text-muted-foreground">→</span>
+              <Badge variant="outline">{room.targetPage}</Badge>
+            </div>
+          </div>
+        )}
 
         {/* Players List */}
         <div className="w-full max-w-sm">
@@ -407,24 +551,37 @@ export function GameView({ roomId }: GameViewProps) {
 
         {/* Start Button (host only) */}
         {isHost ? (
-          <Button
-            size="lg"
-            onClick={handleStartGame}
-            disabled={starting || playerCount < 1}
-            className="gap-2 px-8"
-          >
-            {starting ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Starting...
-              </>
-            ) : (
-              <>
-                <Play className="size-4" />
-                Start Game
-              </>
-            )}
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                sessionStorage.removeItem("wikirace_room_id");
+                router.push("/");
+              }}
+              className="gap-2"
+            >
+              <Home className="size-4" />
+              New Room
+            </Button>
+            <Button
+              size="lg"
+              onClick={handleStartGame}
+              disabled={starting || playerCount < 1}
+              className="gap-2 px-8"
+            >
+              {starting ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Starting...
+                </>
+              ) : (
+                <>
+                  <Play className="size-4" />
+                  Start Game
+                </>
+              )}
+            </Button>
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground animate-pulse">
             Waiting for host to start the game...
@@ -436,12 +593,13 @@ export function GameView({ roomId }: GameViewProps) {
 
   // ── Game In Progress ──────────────────────────────────────
   return (
+    <>
     <div className="flex h-screen overflow-hidden">
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header Bar */}
-        <div className="shrink-0 p-3 border-b border-border/40 bg-background/80 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
+        <div className="shrink-0 px-2 py-1.5 sm:p-3 border-b border-border/40 bg-background/80 backdrop-blur-sm">
+          <div className="flex items-center gap-1.5 sm:gap-3">
             <div className="flex-1 min-w-0">
               <GameHeader
                 startPage={room.startPage}
@@ -454,15 +612,47 @@ export function GameView({ roomId }: GameViewProps) {
               />
             </div>
 
-            {/* View Results (if finished) */}
-            {me?.finished && (
+            {/* Back / Give Up / Results buttons */}
+            {me?.finished ? (
               <Button
                 onClick={() => router.push(`/room/${roomId}/results`)}
-                className="gap-2 shrink-0"
+                size="sm"
+                className="gap-1.5 shrink-0"
               >
                 <Trophy className="size-4" />
-                Results
+                <span className="hidden sm:inline">Results</span>
               </Button>
+            ) : room.status === "playing" && (
+              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                {/* Back Button */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleGoBack}
+                  disabled={goingBack || navigating || (me?.steps ?? 0) < 1}
+                  title="Go back to previous page"
+                  className="size-8 sm:size-9"
+                >
+                  <Undo2 className="size-3.5 sm:size-4" />
+                </Button>
+
+                {/* Give Up Button */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setShowGiveUpDialog(true)}
+                  disabled={givingUp}
+                  title="Give Up"
+                  className="size-8 sm:size-9 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive sm:w-auto sm:px-3 sm:gap-2"
+                >
+                  {givingUp ? (
+                    <Loader2 className="size-3.5 sm:size-4 animate-spin" />
+                  ) : (
+                    <Flag className="size-3.5 sm:size-4" />
+                  )}
+                  <span className="hidden sm:inline text-sm">Give Up</span>
+                </Button>
+              </div>
             )}
 
             {/* Toggle Players Panel (mobile) — big tap target */}
@@ -562,5 +752,29 @@ export function GameView({ roomId }: GameViewProps) {
         />
       </div>
     </div>
+
+      {/* Give Up Confirmation Dialog */}
+      <AlertDialog open={showGiveUpDialog} onOpenChange={setShowGiveUpDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Give up the race?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You&apos;ve taken <span className="font-mono font-bold text-foreground">{me?.steps ?? 0}</span> steps so far.
+              Giving up means you won&apos;t be ranked among the finishers. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Going</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleGiveUp}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Flag className="size-4 mr-2" />
+              Give Up
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

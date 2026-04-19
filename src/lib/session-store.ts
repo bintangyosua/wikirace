@@ -85,6 +85,7 @@ export function startGame(roomId: string): Room | null {
     player.currentPage = room.startPage;
     player.path = [room.startPage];
     player.steps = 0;
+    player.gaveUp = false;
   }
 
   broadcastToRoom(roomId, {
@@ -126,6 +127,34 @@ export function updatePlayerNavigation(
   return player;
 }
 
+export function goBackPlayer(
+  roomId: string,
+  playerId: string
+): Player | null {
+  const room = rooms.get(roomId);
+  if (!room) return null;
+
+  const player = room.players.get(playerId);
+  if (!player || player.finished) return null;
+
+  // Can't go back past the start page
+  if (player.path.length <= 1) return null;
+
+  player.path.pop();
+  player.currentPage = player.path[player.path.length - 1];
+  player.steps = player.path.length - 1;
+
+  broadcastToRoom(roomId, {
+    type: "player_navigated",
+    playerId,
+    page: player.currentPage,
+    steps: player.steps,
+    path: [...player.path],
+  });
+
+  return player;
+}
+
 export function finishPlayer(
   roomId: string,
   playerId: string
@@ -155,6 +184,67 @@ export function finishPlayer(
   }
 
   return player;
+}
+
+export function giveUpPlayer(
+  roomId: string,
+  playerId: string
+): Player | null {
+  const room = rooms.get(roomId);
+  if (!room || !room.startTime) return null;
+
+  const player = room.players.get(playerId);
+  if (!player || player.finished) return null;
+
+  player.finished = true;
+  player.gaveUp = true;
+  player.finishTime = null;
+
+  broadcastToRoom(roomId, {
+    type: "player_gave_up",
+    playerId,
+  });
+
+  // Check if all players finished
+  const allFinished = Array.from(room.players.values()).every(
+    (p) => p.finished
+  );
+  if (allFinished) {
+    room.status = "finished";
+  }
+
+  return player;
+}
+
+export function restartRoom(
+  roomId: string,
+  startPage: string,
+  targetPage: string
+): Room | null {
+  const room = rooms.get(roomId);
+  if (!room) return null;
+
+  room.status = "waiting";
+  room.startTime = null;
+  room.startPage = startPage;
+  room.targetPage = targetPage;
+
+  // Reset all players' game state
+  for (const player of room.players.values()) {
+    player.currentPage = startPage;
+    player.path = [startPage];
+    player.steps = 0;
+    player.finished = false;
+    player.gaveUp = false;
+    player.finishTime = null;
+  }
+
+  broadcastToRoom(roomId, {
+    type: "game_restarted",
+    room: serializeRoom(room),
+  });
+
+  return room;
 }
 
 // ─── Serialization ────────────────────────────────────────

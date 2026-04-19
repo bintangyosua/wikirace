@@ -55,6 +55,7 @@ export async function POST(request: Request) {
       currentPage: startPage,
       path: [startPage],
       finished: false,
+      gaveUp: false,
       finishTime: null,
       steps: 0,
     };

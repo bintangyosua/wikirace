@@ -5,7 +5,7 @@ import { StepHistory } from "@/components/step-history";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { formatTime } from "@/lib/game-utils";
-import { Crown, CheckCircle2, Navigation } from "lucide-react";
+import { Crown, CheckCircle2, Navigation, Flag } from "lucide-react";
 
 interface PlayerCardProps {
   player: Player;
@@ -28,18 +28,20 @@ export function PlayerCard({
         isCurrentUser
           ? "border-primary/30 bg-primary/5"
           : "border-border/40 bg-card/50"
-      } ${player.finished ? "ring-1 ring-emerald-500/30" : ""}`}
+      } ${player.gaveUp ? "ring-1 ring-destructive/30" : player.finished ? "ring-1 ring-emerald-500/30" : ""}`}
     >
       {/* Header */}
       <div className="flex items-center gap-2 mb-2">
         {/* Avatar / Initial */}
         <div
           className={`flex items-center justify-center size-7 rounded-full text-xs font-bold shrink-0 ${
-            player.finished
-              ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-              : isCurrentUser
-                ? "bg-primary/20 text-primary"
-                : "bg-muted text-muted-foreground"
+            player.gaveUp
+              ? "bg-destructive/20 text-destructive"
+              : player.finished
+                ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                : isCurrentUser
+                  ? "bg-primary/20 text-primary"
+                  : "bg-muted text-muted-foreground"
           }`}
         >
           {player.name.charAt(0).toUpperCase()}
@@ -61,7 +63,15 @@ export function PlayerCard({
         </div>
 
         {/* Status Badge */}
-        {player.finished ? (
+        {player.gaveUp ? (
+          <Badge
+            variant="secondary"
+            className="gap-1 shrink-0 bg-destructive/10 text-destructive border-destructive/20"
+          >
+            <Flag className="size-3" />
+            Gave Up
+          </Badge>
+        ) : player.finished ? (
           <Badge
             variant="secondary"
             className="gap-1 shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"

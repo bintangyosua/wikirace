@@ -23,6 +23,8 @@ import {
   ArrowRight,
   Home,
   RotateCcw,
+  Flag,
+  Loader2,
 } from "lucide-react";
 
 interface ResultsViewProps {
@@ -46,6 +48,7 @@ export function ResultsView({ roomId }: ResultsViewProps) {
   const [room, setRoom] = useState<SerializedRoom | null>(null);
   const [playerId, setPlayerId] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
     const id = sessionStorage.getItem("wikirace_player_id") || "";
@@ -110,16 +113,20 @@ export function ResultsView({ roomId }: ResultsViewProps) {
             <Card
               key={player.id}
               className={`overflow-hidden transition-all ${
-                index < 3 && player.finished
+                index < 3 && player.finished && !player.gaveUp
                   ? `bg-gradient-to-r ${rankColors[index] ?? ""} border`
-                  : "border-border/40"
+                  : player.gaveUp
+                    ? "border-destructive/20 bg-destructive/5"
+                    : "border-border/40"
               } ${player.id === playerId ? "ring-1 ring-primary/30" : ""}`}
             >
               <CardHeader className="pb-2">
                 <div className="flex items-center gap-3">
                   {/* Rank */}
                   <div className="flex items-center justify-center size-9 rounded-full bg-muted shrink-0">
-                    {player.finished && index < 3 ? (
+                    {player.gaveUp ? (
+                      <Flag className="size-5 text-destructive" />
+                    ) : player.finished && index < 3 ? (
                       rankIcons[index]
                     ) : (
                       <span className="text-sm font-bold text-muted-foreground">
@@ -139,9 +146,11 @@ export function ResultsView({ roomId }: ResultsViewProps) {
                       )}
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      {player.finished
-                        ? "Finished"
-                        : `Still on: ${player.currentPage}`}
+                      {player.gaveUp
+                        ? "Gave Up"
+                        : player.finished
+                          ? "Finished"
+                          : `Still on: ${player.currentPage}`}
                     </CardDescription>
                   </div>
 
@@ -154,7 +163,7 @@ export function ResultsView({ roomId }: ResultsViewProps) {
                           {player.steps}
                         </span>
                       </div>
-                      {player.finishTime !== null && (
+                      {!player.gaveUp && player.finishTime !== null && (
                         <div className="flex items-center gap-1">
                           <Clock className="size-4 text-muted-foreground" />
                           <span className="font-mono font-bold">
@@ -183,19 +192,53 @@ export function ResultsView({ roomId }: ResultsViewProps) {
         <div className="flex items-center justify-center gap-3 pt-4">
           <Button
             variant="outline"
-            onClick={() => router.push("/")}
+            onClick={() => {
+              sessionStorage.removeItem("wikirace_room_id");
+              router.push("/");
+            }}
             className="gap-2"
           >
             <Home className="size-4" />
-            Back to Lobby
+            New Room
           </Button>
-          <Button
-            onClick={() => router.push("/")}
-            className="gap-2"
-          >
-            <RotateCcw className="size-4" />
-            Play Again
-          </Button>
+          {room.hostId === playerId ? (
+            <Button
+              onClick={async () => {
+                setRestarting(true);
+                try {
+                  const res = await fetch(`/api/rooms/${roomId}/restart`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ playerId }),
+                  });
+                  if (res.ok) {
+                    router.push(`/room/${roomId}`);
+                  }
+                } catch (err) {
+                  console.error("Failed to restart:", err);
+                } finally {
+                  setRestarting(false);
+                }
+              }}
+              disabled={restarting}
+              className="gap-2"
+            >
+              {restarting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RotateCcw className="size-4" />
+              )}
+              Play Again
+            </Button>
+          ) : (
+            <Button
+              onClick={() => router.push(`/room/${roomId}`)}
+              className="gap-2"
+            >
+              <ArrowRight className="size-4" />
+              Back to Room
+            </Button>
+          )}
         </div>
       </div>
     </div>

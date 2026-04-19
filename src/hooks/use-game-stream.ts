@@ -26,6 +26,10 @@ type GameAction =
       finishTime: number;
       steps: number;
     }
+  | {
+      type: "PLAYER_GAVE_UP";
+      playerId: string;
+    }
   | { type: "GAME_STARTED"; startTime: number }
   | { type: "SET_CONNECTED"; connected: boolean }
   | { type: "SET_ERROR"; error: string };
@@ -79,6 +83,24 @@ function gameReducer(state: GameState, action: GameAction): GameState {
               finished: true,
               finishTime: action.finishTime,
               steps: action.steps,
+            },
+          },
+        },
+      };
+
+    case "PLAYER_GAVE_UP":
+      if (!state.room) return state;
+      return {
+        ...state,
+        room: {
+          ...state.room,
+          players: {
+            ...state.room.players,
+            [action.playerId]: {
+              ...state.room.players[action.playerId],
+              finished: true,
+              gaveUp: true,
+              finishTime: null,
             },
           },
         },
@@ -158,8 +180,17 @@ export function useGameStream(roomId: string) {
               steps: data.steps,
             });
             break;
+          case "player_gave_up":
+            dispatch({
+              type: "PLAYER_GAVE_UP",
+              playerId: data.playerId,
+            });
+            break;
           case "game_started":
             dispatch({ type: "GAME_STARTED", startTime: data.startTime });
+            break;
+          case "game_restarted":
+            dispatch({ type: "SET_ROOM", room: data.room });
             break;
         }
       } catch (err) {

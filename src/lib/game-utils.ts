@@ -14,23 +14,37 @@ export function generateRoomId(): string {
 
 /**
  * Rank players by:
- * 1. Finished players first
- * 2. Fewest steps
- * 3. Fastest time
+ * 1. Finished (not gave up) first, by fewest steps then fastest time
+ * 2. Gave up players next, by most steps (more effort)
+ * 3. Still playing last, by steps
  */
 export function rankPlayers(players: Player[]): Player[] {
   return [...players].sort((a, b) => {
-    // Finished players come first
-    if (a.finished && !b.finished) return -1;
-    if (!a.finished && b.finished) return 1;
+    const aFinished = a.finished && !a.gaveUp;
+    const bFinished = b.finished && !b.gaveUp;
+    const aGaveUp = a.finished && a.gaveUp;
+    const bGaveUp = b.finished && b.gaveUp;
+
+    // Finished (not gave up) come first
+    if (aFinished && !bFinished) return -1;
+    if (!aFinished && bFinished) return 1;
 
     // Both finished — sort by steps, then time
-    if (a.finished && b.finished) {
+    if (aFinished && bFinished) {
       if (a.steps !== b.steps) return a.steps - b.steps;
       return (a.finishTime ?? Infinity) - (b.finishTime ?? Infinity);
     }
 
-    // Both not finished — sort by steps (more progress = fewer steps? no, just by steps count)
+    // Gave up before still playing
+    if (aGaveUp && !bGaveUp) return -1;
+    if (!aGaveUp && bGaveUp) return 1;
+
+    // Both gave up — more steps = more effort = higher
+    if (aGaveUp && bGaveUp) {
+      return b.steps - a.steps;
+    }
+
+    // Both still playing — sort by steps
     return a.steps - b.steps;
   });
 }
