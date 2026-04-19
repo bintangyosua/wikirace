@@ -148,9 +148,14 @@ export function ArticleRenderer({
         return;
       }
 
-      // Skip self-referencing links (e.g. /wiki/Current_Page#section)
+      // Skip self-referencing links — compare against BOTH currentPage
+      // AND the article's actual title (handles Wikipedia redirects)
       const normalise = (s: string) => s.replace(/_/g, " ").toLowerCase().trim();
-      if (normalise(title) === normalise(currentPage)) {
+      const normTitle = normalise(title);
+      if (
+        normTitle === normalise(currentPage) ||
+        (article && normTitle === normalise(article.title))
+      ) {
         // If the link has a hash, scroll to that section instead
         const hashMatch = href.match(/#(.+)$/);
         if (hashMatch) {
@@ -162,7 +167,7 @@ export function ArticleRenderer({
 
       onNavigate(title);
     },
-    [onNavigate, disabled, currentPage]
+    [onNavigate, disabled, currentPage, article]
   );
 
   if (loading) {
