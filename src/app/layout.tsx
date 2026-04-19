@@ -11,6 +11,10 @@ export const metadata: Metadata = {
   title: "WikiRace — Multiplayer Wikipedia Racing Game",
   description:
     "Race from one Wikipedia article to another using only internal links. Compete with friends in real-time — fewest steps wins!",
+  icons: {
+    icon: "/web-logo.ico",
+    apple: "/web-logo.ico",
+  },
 };
 
 export default function RootLayout({
