@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Clock, Footprints, Target } from "lucide-react";
 import { formatTime } from "@/lib/game-utils";
@@ -24,31 +24,28 @@ export function GameHeader({
   finished,
   finishTime,
 }: GameHeaderProps) {
-  const [elapsed, setElapsed] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (finished && finishTime !== null) {
-      setElapsed(finishTime);
-      if (intervalRef.current) clearInterval(intervalRef.current);
+    if (finished || !startTime) {
       return;
     }
 
-    if (!startTime) {
-      setElapsed(0);
-      return;
-    }
-
-    // Start timer
-    setElapsed(Date.now() - startTime);
-    intervalRef.current = setInterval(() => {
-      setElapsed(Date.now() - startTime);
+    const intervalId = setInterval(() => {
+      setNow(Date.now());
     }, 50);
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      clearInterval(intervalId);
     };
-  }, [startTime, finished, finishTime]);
+  }, [startTime, finished]);
+
+  const elapsed =
+    finished && finishTime !== null
+      ? finishTime
+      : startTime
+        ? now - startTime
+        : 0;
 
   const isOnTarget = currentPage === targetPage;
 
@@ -70,8 +67,13 @@ export function GameHeader({
         {/* Route on desktop — inline after stats */}
         <div className="w-px h-4 bg-border/60 shrink-0 hidden sm:block" />
         <div className="hidden sm:flex items-center gap-1.5 min-w-0 overflow-hidden">
-          <Badge variant="secondary" className="gap-1 shrink-0 max-w-[140px] text-xs">
-            <span className="truncate" title={startPage}>{startPage}</span>
+          <Badge
+            variant="secondary"
+            className="gap-1 shrink-0 max-w-35 text-xs"
+          >
+            <span className="truncate" title={startPage}>
+              {startPage}
+            </span>
           </Badge>
           <ArrowRight className="size-3 text-muted-foreground shrink-0" />
           <Badge
@@ -79,7 +81,9 @@ export function GameHeader({
             className={`gap-1 shrink min-w-0 text-xs ${isOnTarget ? "animate-pulse" : ""}`}
           >
             <Target className="size-3 shrink-0" />
-            <span className="truncate" title={targetPage}>{targetPage}</span>
+            <span className="truncate" title={targetPage}>
+              {targetPage}
+            </span>
           </Badge>
         </div>
 
@@ -93,8 +97,13 @@ export function GameHeader({
 
       {/* Row 2: Route on mobile only */}
       <div className="flex items-center gap-1.5 sm:hidden min-w-0 overflow-hidden">
-        <Badge variant="secondary" className="gap-1 shrink min-w-0 text-[10px] px-1.5 py-0">
-          <span className="truncate" title={startPage}>{startPage}</span>
+        <Badge
+          variant="secondary"
+          className="gap-1 shrink min-w-0 text-[10px] px-1.5 py-0"
+        >
+          <span className="truncate" title={startPage}>
+            {startPage}
+          </span>
         </Badge>
         <ArrowRight className="size-3 text-muted-foreground shrink-0" />
         <Badge
@@ -102,7 +111,9 @@ export function GameHeader({
           className={`gap-1 shrink min-w-0 text-[10px] px-1.5 py-0 ${isOnTarget ? "animate-pulse" : ""}`}
         >
           <Target className="size-2.5 shrink-0" />
-          <span className="truncate" title={targetPage}>{targetPage}</span>
+          <span className="truncate" title={targetPage}>
+            {targetPage}
+          </span>
         </Badge>
       </div>
     </div>

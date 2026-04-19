@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,16 @@ import {
   joinRoomSchema,
   getFieldErrors,
 } from "@/lib/validations";
-import { Globe, Users, Zap, ArrowRight, Loader2, Shuffle, AlertCircle, LogIn } from "lucide-react";
+import {
+  Globe,
+  Users,
+  Zap,
+  ArrowRight,
+  Loader2,
+  Shuffle,
+  AlertCircle,
+  LogIn,
+} from "lucide-react";
 
 /** Inline field error shown below each input */
 function FieldError({ message }: { message?: string }) {
@@ -34,7 +43,10 @@ function FieldError({ message }: { message?: string }) {
 export function LobbyForm() {
   const router = useRouter();
   const [mode, setMode] = useState<"create" | "join">("create");
-  const [playerName, setPlayerName] = useState("");
+  const [playerName, setPlayerName] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("wikirace_player_name") || "";
+  });
   const [roomCode, setRoomCode] = useState("");
   const [startPage, setStartPage] = useState("");
   const [targetPage, setTargetPage] = useState("");
@@ -42,19 +54,10 @@ export function LobbyForm() {
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-
-  // Check for an existing active room session
-  useEffect(() => {
-    const storedRoomId = sessionStorage.getItem("wikirace_room_id");
-    const storedName = sessionStorage.getItem("wikirace_player_name");
-    if (storedRoomId) {
-      setActiveRoomId(storedRoomId);
-    }
-    if (storedName) {
-      setPlayerName(storedName);
-    }
-  }, []);
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return sessionStorage.getItem("wikirace_room_id");
+  });
 
   const clearErrors = () => {
     setFieldErrors({});
@@ -117,7 +120,7 @@ export function LobbyForm() {
       router.push(`/room/${data.roomId}`);
     } catch (err) {
       setServerError(
-        err instanceof Error ? err.message : "Something went wrong"
+        err instanceof Error ? err.message : "Something went wrong",
       );
       setLoading(false);
     }
@@ -142,17 +145,14 @@ export function LobbyForm() {
       const playerId = getOrCreatePlayerId();
       sessionStorage.setItem("wikirace_player_name", result.data.playerName);
 
-      const res = await fetch(
-        `/api/rooms/${result.data.roomCode}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            playerId,
-            playerName: result.data.playerName,
-          }),
-        }
-      );
+      const res = await fetch(`/api/rooms/${result.data.roomCode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId,
+          playerName: result.data.playerName,
+        }),
+      });
 
       if (!res.ok) {
         const data = await res.json();
@@ -163,7 +163,7 @@ export function LobbyForm() {
       router.push(`/room/${result.data.roomCode}`);
     } catch (err) {
       setServerError(
-        err instanceof Error ? err.message : "Something went wrong"
+        err instanceof Error ? err.message : "Something went wrong",
       );
       setLoading(false);
     }
@@ -181,7 +181,10 @@ export function LobbyForm() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">You have an active room</p>
               <p className="text-xs text-muted-foreground">
-                Room <span className="font-mono font-bold text-primary">{activeRoomId}</span>
+                Room{" "}
+                <span className="font-mono font-bold text-primary">
+                  {activeRoomId}
+                </span>
               </p>
             </div>
             <div className="flex gap-2 shrink-0">
@@ -212,7 +215,10 @@ export function LobbyForm() {
       {/* Mode Toggle */}
       <div className="flex gap-1 rounded-lg bg-muted p-1">
         <button
-          onClick={() => { setMode("create"); clearErrors(); }}
+          onClick={() => {
+            setMode("create");
+            clearErrors();
+          }}
           className={`rounded-md px-4 py-2 text-sm font-medium transition-all ${
             mode === "create"
               ? "bg-background text-foreground shadow-sm"
@@ -222,7 +228,10 @@ export function LobbyForm() {
           Create Room
         </button>
         <button
-          onClick={() => { setMode("join"); clearErrors(); }}
+          onClick={() => {
+            setMode("join");
+            clearErrors();
+          }}
           className={`rounded-md px-4 py-2 text-sm font-medium transition-all ${
             mode === "join"
               ? "bg-background text-foreground shadow-sm"
@@ -271,7 +280,11 @@ export function LobbyForm() {
               }}
               maxLength={20}
               disabled={loading}
-              className={fieldErrors.playerName ? "border-destructive/60 focus-visible:ring-destructive/30" : ""}
+              className={
+                fieldErrors.playerName
+                  ? "border-destructive/60 focus-visible:ring-destructive/30"
+                  : ""
+              }
             />
             <FieldError message={fieldErrors.playerName} />
           </div>
@@ -301,7 +314,9 @@ export function LobbyForm() {
                 }}
                 maxLength={6}
                 className={`uppercase tracking-widest text-center font-mono text-lg ${
-                  fieldErrors.roomCode ? "border-destructive/60 focus-visible:ring-destructive/30" : ""
+                  fieldErrors.roomCode
+                    ? "border-destructive/60 focus-visible:ring-destructive/30"
+                    : ""
                 }`}
                 disabled={loading}
               />
@@ -428,18 +443,14 @@ export function LobbyForm() {
             <Users className="size-5 text-primary" />
           </div>
           <p className="text-sm font-medium">Race Friends</p>
-          <p className="text-xs text-muted-foreground">
-            Compete in real-time
-          </p>
+          <p className="text-xs text-muted-foreground">Compete in real-time</p>
         </div>
         <div className="flex flex-col items-center gap-2 rounded-xl border border-border/40 bg-card/50 p-4 backdrop-blur-sm text-center">
           <div className="flex items-center justify-center size-10 rounded-lg bg-primary/10">
             <Zap className="size-5 text-primary" />
           </div>
           <p className="text-sm font-medium">Fewest Steps Wins</p>
-          <p className="text-xs text-muted-foreground">
-            Strategy beats speed
-          </p>
+          <p className="text-xs text-muted-foreground">Strategy beats speed</p>
         </div>
       </div>
     </div>

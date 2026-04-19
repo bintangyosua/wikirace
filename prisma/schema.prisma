@@ -1,0 +1,55 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoomStatus {
+  waiting
+  playing
+  finished
+}
+
+model Room {
+  id         String     @id @default(cuid())
+  roomId     String     @unique
+  startPage  String
+  targetPage String
+  startTime  BigInt?
+  status     RoomStatus @default(waiting)
+  hostId     String
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  players    RoomPlayer[]
+
+  @@index([createdAt])
+}
+
+model RoomPlayer {
+  id         String   @id @default(cuid())
+  playerId   String
+  name       String
+  currentPage String
+  path       String[]
+  finished   Boolean  @default(false)
+  gaveUp     Boolean  @default(false)
+  finishTime BigInt?
+  steps      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  roomId String
+  room   Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, playerId])
+  @@index([roomId])
+}
+

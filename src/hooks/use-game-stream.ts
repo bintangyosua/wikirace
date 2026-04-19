@@ -155,7 +155,10 @@ export function useGameStream(roomId: string) {
   });
 
   const eventSourceRef = useRef<EventSource | null>(null);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     // Close existing connection
@@ -232,12 +235,13 @@ export function useGameStream(roomId: string) {
 
       // Reconnect after 2 seconds
       reconnectTimeoutRef.current = setTimeout(() => {
-        connect();
+        connectRef.current();
       }, 2000);
     };
   }, [roomId]);
 
   useEffect(() => {
+    connectRef.current = connect;
     connect();
 
     return () => {

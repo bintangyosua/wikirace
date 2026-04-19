@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { SerializedRoom, Player } from "@/lib/types";
+import type { SerializedRoom } from "@/lib/types";
 import { rankPlayers, formatTime } from "@/lib/game-utils";
 import { StepHistory } from "@/components/step-history";
 import { Button } from "@/components/ui/button";
@@ -69,149 +69,146 @@ export function ResultsView({ room, playerId, onClose }: ResultsViewProps) {
       </Button>
 
       {/* Header */}
-        <div className="text-center space-y-3">
-          <div className="text-5xl">🏁</div>
-          <h1 className="text-3xl font-bold">Race Results</h1>
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Badge variant="secondary">{room.startPage}</Badge>
-            <ArrowRight className="size-4" />
-            <Badge variant="outline">{room.targetPage}</Badge>
-          </div>
+      <div className="text-center space-y-3">
+        <div className="text-5xl">🏁</div>
+        <h1 className="text-3xl font-bold">Race Results</h1>
+        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Badge variant="secondary">{room.startPage}</Badge>
+          <ArrowRight className="size-4" />
+          <Badge variant="outline">{room.targetPage}</Badge>
         </div>
+      </div>
 
-        {/* Podium / Rankings */}
-        <div className="space-y-3">
-          {ranked.map((player, index) => (
-            <Card
-              key={player.id}
-              className={`overflow-hidden transition-all ${
-                index < 3 && player.finished && !player.gaveUp
-                  ? `bg-gradient-to-r ${rankColors[index] ?? ""} border`
-                  : player.gaveUp
-                    ? "border-destructive/20 bg-destructive/5"
-                    : "border-border/40"
-              } ${player.id === playerId ? "ring-1 ring-primary/30" : ""}`}
-            >
-              <CardHeader className="pb-2">
-                <div className="flex items-center gap-3">
-                  {/* Rank */}
-                  <div className="flex items-center justify-center size-9 rounded-full bg-muted shrink-0">
-                    {player.gaveUp ? (
-                      <Flag className="size-5 text-destructive" />
-                    ) : player.finished && index < 3 ? (
-                      rankIcons[index]
-                    ) : (
-                      <span className="text-sm font-bold text-muted-foreground">
-                        #{index + 1}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Name */}
-                  <div className="min-w-0 flex-1">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <span className="truncate">{player.name}</span>
-                      {player.id === playerId && (
-                        <span className="text-xs text-muted-foreground">
-                          (you)
-                        </span>
-                      )}
-                    </CardTitle>
-                    <CardDescription className="text-xs">
-                      {player.gaveUp
-                        ? "Gave Up"
-                        : player.finished
-                          ? "Finished"
-                          : `Still on: ${player.currentPage}`}
-                    </CardDescription>
-                  </div>
-
-                  {/* Stats */}
-                  {player.finished && (
-                    <div className="flex items-center gap-4 text-sm shrink-0">
-                      <div className="flex items-center gap-1">
-                        <Footprints className="size-4 text-muted-foreground" />
-                        <span className="font-mono font-bold">
-                          {player.steps}
-                        </span>
-                      </div>
-                      {!player.gaveUp && player.finishTime !== null && (
-                        <div className="flex items-center gap-1">
-                          <Clock className="size-4 text-muted-foreground" />
-                          <span className="font-mono font-bold">
-                            {formatTime(player.finishTime)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
+      {/* Podium / Rankings */}
+      <div className="space-y-3">
+        {ranked.map((player, index) => (
+          <Card
+            key={player.id}
+            className={`overflow-hidden transition-all ${
+              index < 3 && player.finished && !player.gaveUp
+                ? `bg-gradient-to-r ${rankColors[index] ?? ""} border`
+                : player.gaveUp
+                  ? "border-destructive/20 bg-destructive/5"
+                  : "border-border/40"
+            } ${player.id === playerId ? "ring-1 ring-primary/30" : ""}`}
+          >
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-3">
+                {/* Rank */}
+                <div className="flex items-center justify-center size-9 rounded-full bg-muted shrink-0">
+                  {player.gaveUp ? (
+                    <Flag className="size-5 text-destructive" />
+                  ) : player.finished && index < 3 ? (
+                    rankIcons[index]
+                  ) : (
+                    <span className="text-sm font-bold text-muted-foreground">
+                      #{index + 1}
+                    </span>
                   )}
                 </div>
-              </CardHeader>
 
-              <CardContent className="pt-0">
-                <Separator className="mb-3" />
-                <StepHistory
-                  path={player.path}
-                  currentPage={player.currentPage}
-                  targetPage={room.targetPage}
-                />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                {/* Name */}
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <span className="truncate">{player.name}</span>
+                    {player.id === playerId && (
+                      <span className="text-xs text-muted-foreground">
+                        (you)
+                      </span>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {player.gaveUp
+                      ? "Gave Up"
+                      : player.finished
+                        ? "Finished"
+                        : `Still on: ${player.currentPage}`}
+                  </CardDescription>
+                </div>
 
-        {/* Actions */}
-        <div className="flex items-center justify-center gap-3 pt-4">
+                {/* Stats */}
+                {player.finished && (
+                  <div className="flex items-center gap-4 text-sm shrink-0">
+                    <div className="flex items-center gap-1">
+                      <Footprints className="size-4 text-muted-foreground" />
+                      <span className="font-mono font-bold">
+                        {player.steps}
+                      </span>
+                    </div>
+                    {!player.gaveUp && player.finishTime !== null && (
+                      <div className="flex items-center gap-1">
+                        <Clock className="size-4 text-muted-foreground" />
+                        <span className="font-mono font-bold">
+                          {formatTime(player.finishTime)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+
+            <CardContent className="pt-0">
+              <Separator className="mb-3" />
+              <StepHistory
+                path={player.path}
+                currentPage={player.currentPage}
+                targetPage={room.targetPage}
+              />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-center gap-3 pt-4">
+        <Button
+          variant="outline"
+          onClick={() => {
+            sessionStorage.removeItem("wikirace_room_id");
+            router.push("/");
+          }}
+          className="gap-2"
+        >
+          <Home className="size-4" />
+          New Room
+        </Button>
+        {room.hostId === playerId ? (
           <Button
-            variant="outline"
-            onClick={() => {
-              sessionStorage.removeItem("wikirace_room_id");
-              router.push("/");
+            onClick={async () => {
+              setRestarting(true);
+              try {
+                const res = await fetch(`/api/rooms/${room.id}/restart`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ playerId }),
+                });
+                if (res.ok) {
+                  onClose(); // Close modal, GameView handles redirect to waiting room
+                }
+              } catch (err) {
+                console.error("Failed to restart:", err);
+              } finally {
+                setRestarting(false);
+              }
             }}
+            disabled={restarting}
             className="gap-2"
           >
-            <Home className="size-4" />
-            New Room
+            {restarting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <RotateCcw className="size-4" />
+            )}
+            Play Again
           </Button>
-          {room.hostId === playerId ? (
-            <Button
-              onClick={async () => {
-                setRestarting(true);
-                try {
-                  const res = await fetch(`/api/rooms/${room.id}/restart`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ playerId }),
-                  });
-                  if (res.ok) {
-                    onClose(); // Close modal, GameView handles redirect to waiting room
-                  }
-                } catch (err) {
-                  console.error("Failed to restart:", err);
-                } finally {
-                  setRestarting(false);
-                }
-              }}
-              disabled={restarting}
-              className="gap-2"
-            >
-              {restarting ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RotateCcw className="size-4" />
-              )}
-              Play Again
-            </Button>
-          ) : (
-            <Button
-              onClick={onClose}
-              className="gap-2"
-            >
-              <ArrowRight className="size-4" />
-              Close Results
-            </Button>
-          )}
-        </div>
+        ) : (
+          <Button onClick={onClose} className="gap-2">
+            <ArrowRight className="size-4" />
+            Close Results
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

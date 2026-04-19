@@ -1,7 +1,6 @@
 import type { GameEvent, Player, Room, SerializedRoom } from "./types";
 import { generateRoomId } from "./game-utils";
-import { connectDB } from "./mongodb";
-import { RoomModel } from "./models/room";
+import { prisma } from "./prisma";
 
 // ─── SSE Subscribers (in-memory only — can't persist connections) ──
 const globalForSubs = globalThis as unknown as {
@@ -14,32 +13,48 @@ if (!globalForSubs.__subscribers) {
 
 const subscribers = globalForSubs.__subscribers;
 
-// ─── Helper: Convert Mongoose doc → Room type ─────────────
-function docToRoom(doc: InstanceType<typeof RoomModel>): Room {
+async function fetchRoomWithPlayers(roomId: string) {
+  return prisma.room.findUnique({
+    where: { roomId },
+    include: {
+      players: {
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+}
+
+type DbRoom = NonNullable<Awaited<ReturnType<typeof fetchRoomWithPlayers>>>;
+type DbPlayer = DbRoom["players"][number];
+
+function dbPlayerToPlayer(player: DbPlayer): Player {
+  return {
+    id: player.playerId,
+    name: player.name,
+    currentPage: player.currentPage,
+    path: [...player.path],
+    finished: player.finished,
+    gaveUp: player.gaveUp,
+    finishTime: player.finishTime === null ? null : Number(player.finishTime),
+    steps: player.steps,
+  };
+}
+
+function dbRoomToRoom(room: DbRoom): Room {
   const players = new Map<string, Player>();
-  if (doc.players) {
-    for (const [key, val] of doc.players.entries()) {
-      players.set(key, {
-        id: val.id,
-        name: val.name,
-        currentPage: val.currentPage,
-        path: [...val.path],
-        finished: val.finished,
-        gaveUp: val.gaveUp,
-        finishTime: val.finishTime,
-        steps: val.steps,
-      });
-    }
+
+  for (const player of room.players) {
+    players.set(player.playerId, dbPlayerToPlayer(player));
   }
 
   return {
-    id: doc.roomId,
-    startPage: doc.startPage,
-    targetPage: doc.targetPage,
-    startTime: doc.startTime,
+    id: room.roomId,
+    startPage: room.startPage,
+    targetPage: room.targetPage,
+    startTime: room.startTime === null ? null : Number(room.startTime),
     players,
-    status: doc.status,
-    hostId: doc.hostId,
+    status: room.status,
+    hostId: room.hostId,
   };
 }
 
@@ -48,41 +63,43 @@ function docToRoom(doc: InstanceType<typeof RoomModel>): Room {
 export async function createRoom(
   startPage: string,
   targetPage: string,
-  hostId: string
+  hostId: string,
 ): Promise<Room> {
-  await connectDB();
-
   let id = generateRoomId();
-  // Ensure unique ID
-  while (await RoomModel.exists({ roomId: id })) {
+
+  while (await prisma.room.findUnique({ where: { roomId: id } })) {
     id = generateRoomId();
   }
 
-  const doc = await RoomModel.create({
-    roomId: id,
-    startPage,
-    targetPage,
-    startTime: null,
-    players: new Map(),
-    status: "waiting",
-    hostId,
+  const room = await prisma.room.create({
+    data: {
+      roomId: id,
+      startPage,
+      targetPage,
+      startTime: null,
+      status: "waiting",
+      hostId,
+    },
+    include: {
+      players: {
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
 
   subscribers.set(id, new Set());
 
-  return docToRoom(doc);
+  return dbRoomToRoom(room);
 }
 
 export async function getRoom(roomId: string): Promise<Room | undefined> {
-  await connectDB();
-  const doc = await RoomModel.findOne({ roomId });
-  if (!doc) return undefined;
-  return docToRoom(doc);
+  const room = await fetchRoomWithPlayers(roomId);
+  if (!room) return undefined;
+  return dbRoomToRoom(room);
 }
 
 export async function deleteRoom(roomId: string): Promise<void> {
-  await connectDB();
-  await RoomModel.deleteOne({ roomId });
+  await prisma.room.deleteMany({ where: { roomId } });
   subscribers.delete(roomId);
 }
 
@@ -90,301 +107,566 @@ export async function deleteRoom(roomId: string): Promise<void> {
 
 export async function addPlayer(
   roomId: string,
-  player: Player
+  player: Player,
 ): Promise<Room | null> {
-  await connectDB();
+  const room = await prisma.room.findUnique({
+    where: { roomId },
+    select: { id: true },
+  });
 
-  const doc = await RoomModel.findOneAndUpdate(
-    { roomId },
-    { $set: { [`players.${player.id}`]: player } },
-    { new: true }
-  );
+  if (!room) return null;
 
-  if (!doc) return null;
+  await prisma.roomPlayer.upsert({
+    where: {
+      roomId_playerId: {
+        roomId: room.id,
+        playerId: player.id,
+      },
+    },
+    update: {
+      name: player.name,
+      currentPage: player.currentPage,
+      path: {
+        set: player.path,
+      },
+      finished: player.finished,
+      gaveUp: player.gaveUp,
+      finishTime: player.finishTime === null ? null : BigInt(player.finishTime),
+      steps: player.steps,
+    },
+    create: {
+      roomId: room.id,
+      playerId: player.id,
+      name: player.name,
+      currentPage: player.currentPage,
+      path: player.path,
+      finished: player.finished,
+      gaveUp: player.gaveUp,
+      finishTime: player.finishTime === null ? null : BigInt(player.finishTime),
+      steps: player.steps,
+    },
+  });
 
-  // Broadcast to other players
+  const updatedRoom = await fetchRoomWithPlayers(roomId);
+  if (!updatedRoom) return null;
+
   broadcastToRoom(roomId, {
     type: "player_joined",
     player,
   });
 
-  return docToRoom(doc);
+  return dbRoomToRoom(updatedRoom);
 }
 
 export async function startGame(roomId: string): Promise<Room | null> {
-  await connectDB();
-
-  const doc = await RoomModel.findOne({ roomId });
-  if (!doc || doc.status !== "waiting") return null;
+  const room = await fetchRoomWithPlayers(roomId);
+  if (!room || room.status !== "waiting") return null;
 
   const startTime = Date.now();
-  doc.status = "playing";
-  doc.startTime = startTime;
 
-  // Reset all players to start page
-  for (const [, player] of doc.players.entries()) {
-    player.currentPage = doc.startPage;
-    player.path = [doc.startPage];
-    player.steps = 0;
-    player.gaveUp = false;
-  }
+  await prisma.$transaction([
+    prisma.room.update({
+      where: { id: room.id },
+      data: {
+        status: "playing",
+        startTime: BigInt(startTime),
+      },
+    }),
+    prisma.roomPlayer.updateMany({
+      where: { roomId: room.id },
+      data: {
+        currentPage: room.startPage,
+        path: {
+          set: [room.startPage],
+        },
+        steps: 0,
+        finished: false,
+        gaveUp: false,
+        finishTime: null,
+      },
+    }),
+  ]);
 
-  await doc.save();
+  const updatedRoom = await fetchRoomWithPlayers(roomId);
+  if (!updatedRoom) return null;
 
   broadcastToRoom(roomId, {
     type: "game_started",
     startTime,
   });
 
-  return docToRoom(doc);
+  return dbRoomToRoom(updatedRoom);
 }
 
 export async function updatePlayerNavigation(
   roomId: string,
   playerId: string,
-  newPage: string
+  newPage: string,
 ): Promise<Player | null> {
-  await connectDB();
+  const now = Date.now();
 
-  const doc = await RoomModel.findOne({ roomId });
-  if (!doc) return null;
+  const result = await prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { roomId },
+      select: {
+        id: true,
+        roomId: true,
+        targetPage: true,
+        startTime: true,
+      },
+    });
 
-  const player = doc.players.get(playerId);
-  if (!player || player.finished) return null;
+    if (!room) {
+      return { ok: false as const };
+    }
 
-  player.currentPage = newPage;
-  player.path.push(newPage);
-  player.steps = player.path.length - 1;
+    const player = await tx.roomPlayer.findUnique({
+      where: {
+        roomId_playerId: {
+          roomId: room.id,
+          playerId,
+        },
+      },
+    });
 
-  broadcastToRoom(roomId, {
+    if (!player || player.finished) {
+      return { ok: false as const };
+    }
+
+    const path = [...player.path, newPage];
+    const steps = path.length - 1;
+
+    let updatedPlayer = await tx.roomPlayer.update({
+      where: { id: player.id },
+      data: {
+        currentPage: newPage,
+        path: {
+          set: path,
+        },
+        steps,
+      },
+    });
+
+    let finishTime: number | null = null;
+
+    if (newPage === room.targetPage && room.startTime !== null) {
+      finishTime = now - Number(room.startTime);
+
+      updatedPlayer = await tx.roomPlayer.update({
+        where: { id: player.id },
+        data: {
+          finished: true,
+          finishTime: BigInt(finishTime),
+        },
+      });
+
+      const unfinished = await tx.roomPlayer.count({
+        where: {
+          roomId: room.id,
+          finished: false,
+        },
+      });
+
+      if (unfinished === 0) {
+        await tx.room.update({
+          where: { id: room.id },
+          data: { status: "finished" },
+        });
+      }
+    }
+
+    return {
+      ok: true as const,
+      roomId: room.roomId,
+      player: updatedPlayer,
+      finishTime,
+    };
+  });
+
+  if (!result.ok) {
+    return null;
+  }
+
+  broadcastToRoom(result.roomId, {
     type: "player_navigated",
     playerId,
     page: newPage,
-    steps: player.steps,
-    path: [...player.path],
+    steps: result.player.steps,
+    path: [...result.player.path],
   });
 
-  // Check if player reached target
-  if (newPage === doc.targetPage) {
-    return finishPlayerInternal(doc, playerId);
+  if (result.finishTime !== null) {
+    broadcastToRoom(result.roomId, {
+      type: "player_finished",
+      playerId,
+      finishTime: result.finishTime,
+      steps: result.player.steps,
+    });
   }
 
-  await doc.save();
-
-  return {
-    id: player.id,
-    name: player.name,
-    currentPage: player.currentPage,
-    path: [...player.path],
-    finished: player.finished,
-    gaveUp: player.gaveUp,
-    finishTime: player.finishTime,
-    steps: player.steps,
-  };
+  return dbPlayerToPlayer(result.player as DbPlayer);
 }
 
 export async function goBackPlayer(
   roomId: string,
-  playerId: string
+  playerId: string,
 ): Promise<Player | null> {
-  await connectDB();
+  const result = await prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { roomId },
+      select: { id: true, roomId: true },
+    });
 
-  const doc = await RoomModel.findOne({ roomId });
-  if (!doc) return null;
+    if (!room) return { ok: false as const };
 
-  const player = doc.players.get(playerId);
-  if (!player || player.finished) return null;
+    const player = await tx.roomPlayer.findUnique({
+      where: {
+        roomId_playerId: {
+          roomId: room.id,
+          playerId,
+        },
+      },
+    });
 
-  // Can't go back past the start page
-  if (player.path.length <= 1) return null;
+    if (!player || player.finished) {
+      return { ok: false as const };
+    }
 
-  player.path.pop();
-  player.currentPage = player.path[player.path.length - 1];
-  player.steps = player.path.length - 1;
+    if (player.path.length <= 1) {
+      return { ok: false as const };
+    }
 
-  await doc.save();
+    const path = player.path.slice(0, -1);
+    const currentPage = path[path.length - 1];
+    const steps = path.length - 1;
 
-  broadcastToRoom(roomId, {
-    type: "player_navigated",
-    playerId,
-    page: player.currentPage,
-    steps: player.steps,
-    path: [...player.path],
+    const updatedPlayer = await tx.roomPlayer.update({
+      where: { id: player.id },
+      data: {
+        currentPage,
+        path: {
+          set: path,
+        },
+        steps,
+      },
+    });
+
+    return {
+      ok: true as const,
+      roomId: room.roomId,
+      player: updatedPlayer,
+    };
   });
 
-  return {
-    id: player.id,
-    name: player.name,
-    currentPage: player.currentPage,
-    path: [...player.path],
-    finished: player.finished,
-    gaveUp: player.gaveUp,
-    finishTime: player.finishTime,
-    steps: player.steps,
-  };
-}
-
-// Internal finish — used when player reaches target during navigation
-async function finishPlayerInternal(
-  doc: InstanceType<typeof RoomModel>,
-  playerId: string
-): Promise<Player | null> {
-  const player = doc.players.get(playerId);
-  if (!player || player.finished || !doc.startTime) return null;
-
-  player.finished = true;
-  player.finishTime = Date.now() - doc.startTime;
-
-  broadcastToRoom(doc.roomId, {
-    type: "player_finished",
-    playerId,
-    finishTime: player.finishTime,
-    steps: player.steps,
-  });
-
-  // Check if all players finished
-  const allFinished = Array.from(doc.players.values()).every(
-    (p) => p.finished
-  );
-  if (allFinished) {
-    doc.status = "finished";
+  if (!result.ok) {
+    return null;
   }
 
-  await doc.save();
+  broadcastToRoom(result.roomId, {
+    type: "player_navigated",
+    playerId,
+    page: result.player.currentPage,
+    steps: result.player.steps,
+    path: [...result.player.path],
+  });
 
-  return {
-    id: player.id,
-    name: player.name,
-    currentPage: player.currentPage,
-    path: [...player.path],
-    finished: player.finished,
-    gaveUp: player.gaveUp,
-    finishTime: player.finishTime,
-    steps: player.steps,
-  };
+  return dbPlayerToPlayer(result.player as DbPlayer);
+}
+
+async function finishPlayerInternal(
+  roomId: string,
+  playerId: string,
+): Promise<Player | null> {
+  const now = Date.now();
+
+  const result = await prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { roomId },
+      select: {
+        id: true,
+        roomId: true,
+        startTime: true,
+      },
+    });
+
+    if (!room || room.startTime === null) {
+      return { ok: false as const };
+    }
+
+    const player = await tx.roomPlayer.findUnique({
+      where: {
+        roomId_playerId: {
+          roomId: room.id,
+          playerId,
+        },
+      },
+    });
+
+    if (!player || player.finished) {
+      return { ok: false as const };
+    }
+
+    const finishTime = now - Number(room.startTime);
+
+    const updatedPlayer = await tx.roomPlayer.update({
+      where: { id: player.id },
+      data: {
+        finished: true,
+        finishTime: BigInt(finishTime),
+      },
+    });
+
+    const unfinished = await tx.roomPlayer.count({
+      where: {
+        roomId: room.id,
+        finished: false,
+      },
+    });
+
+    if (unfinished === 0) {
+      await tx.room.update({
+        where: { id: room.id },
+        data: { status: "finished" },
+      });
+    }
+
+    return {
+      ok: true as const,
+      roomId: room.roomId,
+      player: updatedPlayer,
+      finishTime,
+    };
+  });
+
+  if (!result.ok) {
+    return null;
+  }
+
+  broadcastToRoom(result.roomId, {
+    type: "player_finished",
+    playerId,
+    finishTime: result.finishTime,
+    steps: result.player.steps,
+  });
+
+  return dbPlayerToPlayer(result.player as DbPlayer);
 }
 
 export async function finishPlayer(
   roomId: string,
-  playerId: string
+  playerId: string,
 ): Promise<Player | null> {
-  await connectDB();
-  const doc = await RoomModel.findOne({ roomId });
-  if (!doc) return null;
-  return finishPlayerInternal(doc, playerId);
+  return finishPlayerInternal(roomId, playerId);
 }
 
 export async function giveUpPlayer(
   roomId: string,
-  playerId: string
+  playerId: string,
 ): Promise<Player | null> {
-  await connectDB();
+  const result = await prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { roomId },
+      select: {
+        id: true,
+        roomId: true,
+        startTime: true,
+      },
+    });
 
-  const doc = await RoomModel.findOne({ roomId });
-  if (!doc || !doc.startTime) return null;
+    if (!room || room.startTime === null) {
+      return { ok: false as const };
+    }
 
-  const player = doc.players.get(playerId);
-  if (!player || player.finished) return null;
+    const player = await tx.roomPlayer.findUnique({
+      where: {
+        roomId_playerId: {
+          roomId: room.id,
+          playerId,
+        },
+      },
+    });
 
-  player.finished = true;
-  player.gaveUp = true;
-  player.finishTime = null;
+    if (!player || player.finished) {
+      return { ok: false as const };
+    }
 
-  broadcastToRoom(doc.roomId, {
+    const updatedPlayer = await tx.roomPlayer.update({
+      where: { id: player.id },
+      data: {
+        finished: true,
+        gaveUp: true,
+        finishTime: null,
+      },
+    });
+
+    const unfinished = await tx.roomPlayer.count({
+      where: {
+        roomId: room.id,
+        finished: false,
+      },
+    });
+
+    if (unfinished === 0) {
+      await tx.room.update({
+        where: { id: room.id },
+        data: { status: "finished" },
+      });
+    }
+
+    return {
+      ok: true as const,
+      roomId: room.roomId,
+      player: updatedPlayer,
+    };
+  });
+
+  if (!result.ok) {
+    return null;
+  }
+
+  broadcastToRoom(result.roomId, {
     type: "player_gave_up",
     playerId,
   });
 
-  // Check if all players finished
-  const allFinished = Array.from(doc.players.values()).every(
-    (p) => p.finished
-  );
-  if (allFinished) {
-    doc.status = "finished";
-  }
-
-  await doc.save();
-
-  return {
-    id: player.id,
-    name: player.name,
-    currentPage: player.currentPage,
-    path: [...player.path],
-    finished: player.finished,
-    gaveUp: player.gaveUp,
-    finishTime: player.finishTime,
-    steps: player.steps,
-  };
+  return dbPlayerToPlayer(result.player as DbPlayer);
 }
 
 export async function restartRoom(
   roomId: string,
   startPage: string,
-  targetPage: string
+  targetPage: string,
 ): Promise<Room | null> {
-  await connectDB();
+  const room = await prisma.room.findUnique({
+    where: { roomId },
+    select: { id: true },
+  });
 
-  const doc = await RoomModel.findOne({ roomId });
-  if (!doc) return null;
+  if (!room) return null;
 
-  doc.status = "waiting";
-  doc.startTime = null;
-  doc.startPage = startPage;
-  doc.targetPage = targetPage;
+  await prisma.$transaction([
+    prisma.room.update({
+      where: { id: room.id },
+      data: {
+        status: "waiting",
+        startTime: null,
+        startPage,
+        targetPage,
+      },
+    }),
+    prisma.roomPlayer.updateMany({
+      where: { roomId: room.id },
+      data: {
+        currentPage: startPage,
+        path: {
+          set: [startPage],
+        },
+        steps: 0,
+        finished: false,
+        gaveUp: false,
+        finishTime: null,
+      },
+    }),
+  ]);
 
-  // Reset all players' game state
-  for (const [, player] of doc.players.entries()) {
-    player.currentPage = startPage;
-    player.path = [startPage];
-    player.steps = 0;
-    player.finished = false;
-    player.gaveUp = false;
-    player.finishTime = null;
-  }
+  const updatedRoom = await fetchRoomWithPlayers(roomId);
+  if (!updatedRoom) return null;
 
-  await doc.save();
-
-  const room = docToRoom(doc);
+  const serialized = serializeRoom(dbRoomToRoom(updatedRoom));
 
   broadcastToRoom(roomId, {
     type: "game_restarted",
-    room: serializeRoom(room),
+    room: serialized,
   });
 
-  return room;
+  return dbRoomToRoom(updatedRoom);
 }
 
-export async function removePlayer(roomId: string, playerId: string): Promise<Room | null> {
-  await connectDB();
-  const doc = await RoomModel.findOne({ roomId });
-  if (!doc) return null;
+export async function removePlayer(
+  roomId: string,
+  playerId: string,
+): Promise<Room | null> {
+  const result = await prisma.$transaction(async (tx) => {
+    const room = await tx.room.findUnique({
+      where: { roomId },
+      include: {
+        players: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
 
-  if (!doc.players.has(playerId)) return docToRoom(doc);
+    if (!room) {
+      return { state: "missing" as const };
+    }
 
-  doc.players.delete(playerId);
+    const leavingPlayer = room.players.find(
+      (player) => player.playerId === playerId,
+    );
+    if (!leavingPlayer) {
+      return { state: "unchanged" as const, room };
+    }
 
-  if (doc.players.size === 0) {
-    await RoomModel.deleteOne({ roomId });
+    await tx.roomPlayer.delete({ where: { id: leavingPlayer.id } });
+
+    const remainingPlayers = await tx.roomPlayer.findMany({
+      where: { roomId: room.id },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (remainingPlayers.length === 0) {
+      await tx.room.delete({ where: { id: room.id } });
+      return { state: "deleted" as const };
+    }
+
+    let newHostId: string | undefined;
+    if (room.hostId === playerId) {
+      newHostId = remainingPlayers[0].playerId;
+      await tx.room.update({
+        where: { id: room.id },
+        data: { hostId: newHostId },
+      });
+    }
+
+    const updatedRoom = await tx.room.findUnique({
+      where: { id: room.id },
+      include: {
+        players: {
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
+
+    if (!updatedRoom) {
+      return { state: "missing" as const };
+    }
+
+    return {
+      state: "updated" as const,
+      room: updatedRoom,
+      newHostId,
+    };
+  });
+
+  if (result.state === "missing") {
+    return null;
+  }
+
+  if (result.state === "deleted") {
     subscribers.delete(roomId);
     return null;
   }
 
-  let newHostId: string | undefined;
-  if (doc.hostId === playerId) {
-    const remainingPlayers = Array.from(doc.players.keys());
-    if (remainingPlayers.length > 0) {
-      newHostId = remainingPlayers[0];
-      doc.hostId = newHostId;
-    }
+  if (result.state === "unchanged") {
+    return dbRoomToRoom(result.room as DbRoom);
   }
 
-  await doc.save();
-  const updatedRoom = docToRoom(doc);
+  const updatedRoom = dbRoomToRoom(result.room as DbRoom);
 
   broadcastToRoom(roomId, {
     type: "player_left",
     playerId,
-    newHostId,
+    newHostId: result.newHostId,
   });
 
   return updatedRoom;
@@ -408,7 +690,7 @@ export function serializeRoom(room: Room): SerializedRoom {
 
 export function addSubscriber(
   roomId: string,
-  controller: ReadableStreamDefaultController
+  controller: ReadableStreamDefaultController,
 ): void {
   let subs = subscribers.get(roomId);
   if (!subs) {
@@ -420,7 +702,7 @@ export function addSubscriber(
 
 export function removeSubscriber(
   roomId: string,
-  controller: ReadableStreamDefaultController
+  controller: ReadableStreamDefaultController,
 ): void {
   const subs = subscribers.get(roomId);
   if (subs) {

@@ -59,9 +59,15 @@ export function GameView({ roomId }: GameViewProps) {
   const router = useRouter();
   const { room, connected } = useGameStream(roomId);
 
-  const [playerId, setPlayerId] = useState<string>("");
-  const [playerName, setPlayerName] = useState<string>("");
-  const [currentPage, setCurrentPage] = useState<string>("");
+  const [playerId, setPlayerId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("wikirace_player_id") || "";
+  });
+  const [playerName, setPlayerName] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("wikirace_player_name") || "";
+  });
+  const [optimisticPage, setOptimisticPage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
   const [navigating, setNavigating] = useState(false);
@@ -75,27 +81,15 @@ export function GameView({ roomId }: GameViewProps) {
   const [useCustomPages, setUseCustomPages] = useState(false);
   const [editStartPage, setEditStartPage] = useState("");
   const [editTargetPage, setEditTargetPage] = useState("");
-  const [restarting, setRestarting] = useState(false);
-
   // For link-join flow: user needs to enter name
-  const [needsName, setNeedsName] = useState(false);
+  const [needsName, setNeedsName] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !(sessionStorage.getItem("wikirace_player_name") || "");
+  });
   const [nameInput, setNameInput] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
   const [nameFieldError, setNameFieldError] = useState("");
-
-  // Load player info from sessionStorage
-  useEffect(() => {
-    const id = sessionStorage.getItem("wikirace_player_id") || "";
-    const name = sessionStorage.getItem("wikirace_player_name") || "";
-    setPlayerId(id);
-    setPlayerName(name);
-
-    // If no name, show name entry form instead of redirecting
-    if (!name) {
-      setNeedsName(true);
-    }
-  }, []);
 
   // Auto-join room once we have room data + player info (for users who came from lobby)
   useEffect(() => {
@@ -117,33 +111,23 @@ export function GameView({ roomId }: GameViewProps) {
     }
   }, [room, playerId, playerName, roomId, needsName]);
 
-  // Sync current page from room state
-  useEffect(() => {
-    if (room && playerId && room.players[playerId]) {
-      setCurrentPage(room.players[playerId].currentPage);
-    } else if (room) {
-      setCurrentPage(room.startPage);
-    }
-  }, [room, playerId]);
-
   // Auto-open results when player finishes
+  const roomStatus = room?.status;
+  const isCurrentPlayerFinished = Boolean(
+    playerId && room?.players[playerId]?.finished,
+  );
+
   useEffect(() => {
-    if (room && playerId && room.players[playerId]?.finished) {
-      if (room.status === "finished") {
-        // Automatically show for everyone when game is fully complete
-        const timer = setTimeout(() => setShowResultsModal(true), 2000);
-        return () => clearTimeout(timer);
-      } else {
-        // Show immediately locally for the player who just finished/gave up
-        const timer = setTimeout(() => setShowResultsModal(true), 2000);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [room?.status, room?.players, playerId]);
+    if (!isCurrentPlayerFinished) return;
+
+    // Show results after a short delay when the local player finishes or gives up.
+    const timer = setTimeout(() => setShowResultsModal(true), 2000);
+    return () => clearTimeout(timer);
+  }, [isCurrentPlayerFinished, roomStatus]);
 
   // Clean up player on tab close (only in waiting room, keep them if playing)
   useEffect(() => {
-    if (!playerId || !room || room.status !== "waiting") return;
+    if (!playerId || roomStatus !== "waiting") return;
 
     const handleUnload = () => {
       // Use sendBeacon for reliable delivery during page unload
@@ -154,45 +138,54 @@ export function GameView({ roomId }: GameViewProps) {
     // 'pagehide' is more reliable than 'unload' on mobile browsers
     window.addEventListener("pagehide", handleUnload);
     window.addEventListener("beforeunload", handleUnload);
-    
+
     return () => {
       window.removeEventListener("pagehide", handleUnload);
       window.removeEventListener("beforeunload", handleUnload);
     };
-  }, [playerId, room?.status, roomId]);
+  }, [playerId, roomStatus, roomId]);
 
   // Real-time broadcast for custom articles
+  const roomHostId = room?.hostId;
+  const roomStartPage = room?.startPage;
+  const roomTargetPage = room?.targetPage;
+  const isHostWaitingRoom = roomStatus === "waiting" && roomHostId === playerId;
+
   useEffect(() => {
     // Only host triggers this, and only in waiting room
-    if (room && room.status === "waiting" && room.hostId === playerId) {
-      if (useCustomPages && editStartPage && editTargetPage) {
-        if (
-          editStartPage !== room.startPage ||
-          editTargetPage !== room.targetPage
-        ) {
-          const updateRoute = setTimeout(() => {
-            fetch(`/api/rooms/${roomId}/restart`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                playerId,
-                startPage: editStartPage,
-                targetPage: editTargetPage,
-              }),
-            }).catch((err) => console.error("Auto-update route failed:", err));
-          }, 300); // 300ms debounce
-          return () => clearTimeout(updateRoute);
-        }
-      }
+    if (
+      !isHostWaitingRoom ||
+      !useCustomPages ||
+      !editStartPage ||
+      !editTargetPage
+    ) {
+      return;
+    }
+
+    if (editStartPage !== roomStartPage || editTargetPage !== roomTargetPage) {
+      const updateRoute = setTimeout(() => {
+        fetch(`/api/rooms/${roomId}/restart`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            playerId,
+            startPage: editStartPage,
+            targetPage: editTargetPage,
+          }),
+        }).catch((err) => console.error("Auto-update route failed:", err));
+      }, 300); // 300ms debounce
+
+      return () => clearTimeout(updateRoute);
     }
   }, [
     useCustomPages,
     editStartPage,
     editTargetPage,
-    room?.status,
-    room?.hostId,
-    room?.startPage,
-    room?.targetPage,
+    roomStatus,
+    roomHostId,
+    roomStartPage,
+    roomTargetPage,
+    isHostWaitingRoom,
     playerId,
     roomId,
   ]);
@@ -315,7 +308,7 @@ export function GameView({ roomId }: GameViewProps) {
       if (navigating || !room || room.status !== "playing") return;
 
       setNavigating(true);
-      setCurrentPage(title); // Optimistic update
+      setOptimisticPage(title);
 
       try {
         const res = await fetch(`/api/rooms/${roomId}/navigate`, {
@@ -325,16 +318,13 @@ export function GameView({ roomId }: GameViewProps) {
         });
 
         if (!res.ok) {
-          if (room.players[playerId]) {
-            setCurrentPage(room.players[playerId].currentPage);
-          }
+          setOptimisticPage(null);
         }
       } catch (err) {
         console.error("Navigation failed:", err);
-        if (room?.players[playerId]) {
-          setCurrentPage(room.players[playerId].currentPage);
-        }
+        setOptimisticPage(null);
       } finally {
+        setOptimisticPage(null);
         setNavigating(false);
       }
     },
@@ -370,7 +360,7 @@ export function GameView({ roomId }: GameViewProps) {
 
     // Optimistic update: go to previous page
     const prevPage = me.path[me.path.length - 2];
-    setCurrentPage(prevPage);
+    setOptimisticPage(prevPage);
 
     try {
       const res = await fetch(`/api/rooms/${roomId}/back`, {
@@ -381,17 +371,27 @@ export function GameView({ roomId }: GameViewProps) {
 
       if (!res.ok) {
         // Revert optimistic update
-        setCurrentPage(me.currentPage);
+        setOptimisticPage(null);
       }
     } catch (err) {
       console.error("Go back failed:", err);
-      setCurrentPage(me.currentPage);
+      setOptimisticPage(null);
     } finally {
+      setOptimisticPage(null);
       setGoingBack(false);
     }
   }, [goingBack, navigating, room, roomId, playerId]);
 
   // ── Name Entry (join via link) ────────────────────────────
+  if (!room) {
+    return (
+      <div className="flex items-center justify-center h-screen gap-3">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        <span className="text-muted-foreground">Connecting to room...</span>
+      </div>
+    );
+  }
+
   if (needsName) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-6">
@@ -465,18 +465,13 @@ export function GameView({ roomId }: GameViewProps) {
     );
   }
 
-  if (!room) {
-    return (
-      <div className="flex items-center justify-center h-screen gap-3">
-        <Loader2 className="size-6 animate-spin text-muted-foreground" />
-        <span className="text-muted-foreground">Connecting to room...</span>
-      </div>
-    );
-  }
-
   const isHost = room.hostId === playerId;
   const me = room.players[playerId];
   const playerCount = Object.keys(room.players).length;
+  const currentPage =
+    optimisticPage && (navigating || goingBack)
+      ? optimisticPage
+      : (me?.currentPage ?? room.startPage);
 
   // ── Waiting Room ──────────────────────────────────────────
   if (room.status === "waiting") {
@@ -730,7 +725,7 @@ export function GameView({ roomId }: GameViewProps) {
               {/* Toggle Players Panel (mobile) — big tap target */}
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border/40 bg-card/60 hover:bg-card active:scale-95 transition-all min-h-[44px] min-w-[44px]"
+                className="lg:hidden shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border/40 bg-card/60 hover:bg-card active:scale-95 transition-all min-h-11 min-w-11"
                 aria-label="Toggle players panel"
               >
                 <Users className="size-4 text-muted-foreground" />
