@@ -134,6 +134,42 @@ export function GameView({ roomId }: GameViewProps) {
     }
   }, [room, playerId, roomId, router]);
 
+  // Real-time broadcast for custom articles
+  useEffect(() => {
+    // Only host triggers this, and only in waiting room
+    if (room && room.status === "waiting" && room.hostId === playerId) {
+      if (useCustomPages && editStartPage && editTargetPage) {
+        if (
+          editStartPage !== room.startPage ||
+          editTargetPage !== room.targetPage
+        ) {
+          const updateRoute = setTimeout(() => {
+            fetch(`/api/rooms/${roomId}/restart`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                playerId,
+                startPage: editStartPage,
+                targetPage: editTargetPage,
+              }),
+            }).catch((err) => console.error("Auto-update route failed:", err));
+          }, 300); // 300ms debounce
+          return () => clearTimeout(updateRoute);
+        }
+      }
+    }
+  }, [
+    useCustomPages,
+    editStartPage,
+    editTargetPage,
+    room?.status,
+    room?.hostId,
+    room?.startPage,
+    room?.targetPage,
+    playerId,
+    roomId,
+  ]);
+
   // ── Join via link: enter name and join ─────────────────────
   const handleLinkJoin = async () => {
     setNameFieldError("");
