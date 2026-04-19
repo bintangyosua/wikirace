@@ -354,6 +354,42 @@ export async function restartRoom(
   return room;
 }
 
+export async function removePlayer(roomId: string, playerId: string): Promise<Room | null> {
+  await connectDB();
+  const doc = await RoomModel.findOne({ roomId });
+  if (!doc) return null;
+
+  if (!doc.players.has(playerId)) return docToRoom(doc);
+
+  doc.players.delete(playerId);
+
+  if (doc.players.size === 0) {
+    await RoomModel.deleteOne({ roomId });
+    subscribers.delete(roomId);
+    return null;
+  }
+
+  let newHostId: string | undefined;
+  if (doc.hostId === playerId) {
+    const remainingPlayers = Array.from(doc.players.keys());
+    if (remainingPlayers.length > 0) {
+      newHostId = remainingPlayers[0];
+      doc.hostId = newHostId;
+    }
+  }
+
+  await doc.save();
+  const updatedRoom = docToRoom(doc);
+
+  broadcastToRoom(roomId, {
+    type: "player_left",
+    playerId,
+    newHostId,
+  });
+
+  return updatedRoom;
+}
+
 // ─── Serialization ────────────────────────────────────────
 
 export function serializeRoom(room: Room): SerializedRoom {

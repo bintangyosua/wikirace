@@ -56,6 +56,11 @@ export type GameEvent =
     }
   | { type: "game_started"; startTime: number }
   | {
+      type: "player_left";
+      playerId: string;
+      newHostId?: string;
+    }
+  | {
       type: "game_restarted";
       room: SerializedRoom;
     }

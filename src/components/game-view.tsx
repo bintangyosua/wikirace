@@ -141,6 +141,26 @@ export function GameView({ roomId }: GameViewProps) {
     }
   }, [room?.status, room?.players, playerId]);
 
+  // Clean up player on tab close (only in waiting room, keep them if playing)
+  useEffect(() => {
+    if (!playerId || !room || room.status !== "waiting") return;
+
+    const handleUnload = () => {
+      // Use sendBeacon for reliable delivery during page unload
+      const data = JSON.stringify({ playerId });
+      navigator.sendBeacon(`/api/rooms/${roomId}/leave`, data);
+    };
+
+    // 'pagehide' is more reliable than 'unload' on mobile browsers
+    window.addEventListener("pagehide", handleUnload);
+    window.addEventListener("beforeunload", handleUnload);
+    
+    return () => {
+      window.removeEventListener("pagehide", handleUnload);
+      window.removeEventListener("beforeunload", handleUnload);
+    };
+  }, [playerId, room?.status, roomId]);
+
   // Real-time broadcast for custom articles
   useEffect(() => {
     // Only host triggers this, and only in waiting room

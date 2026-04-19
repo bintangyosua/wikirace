@@ -31,6 +31,11 @@ type GameAction =
       playerId: string;
     }
   | { type: "GAME_STARTED"; startTime: number }
+  | {
+      type: "PLAYER_LEFT";
+      playerId: string;
+      newHostId?: string;
+    }
   | { type: "SET_CONNECTED"; connected: boolean }
   | { type: "SET_ERROR"; error: string };
 
@@ -117,6 +122,19 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
       };
 
+    case "PLAYER_LEFT":
+      if (!state.room) return state;
+      const newPlayers = { ...state.room.players };
+      delete newPlayers[action.playerId];
+      return {
+        ...state,
+        room: {
+          ...state.room,
+          players: newPlayers,
+          hostId: action.newHostId || state.room.hostId,
+        },
+      };
+
     case "SET_CONNECTED":
       return { ...state, connected: action.connected };
 
@@ -152,45 +170,55 @@ export function useGameStream(roomId: string) {
       dispatch({ type: "SET_CONNECTED", connected: true });
     };
 
-    es.onmessage = (event) => {
+    es.onmessage = (e) => {
       try {
-        const data = JSON.parse(event.data) as GameEvent;
+        const event: GameEvent = JSON.parse(e.data);
 
-        switch (data.type) {
+        switch (event.type) {
           case "full_state":
-            dispatch({ type: "SET_ROOM", room: data.room });
+            dispatch({ type: "SET_ROOM", room: event.room });
             break;
           case "player_joined":
-            dispatch({ type: "PLAYER_JOINED", player: data.player });
+            dispatch({ type: "PLAYER_JOINED", player: event.player });
             break;
           case "player_navigated":
             dispatch({
               type: "PLAYER_NAVIGATED",
-              playerId: data.playerId,
-              page: data.page,
-              steps: data.steps,
-              path: data.path,
+              playerId: event.playerId,
+              page: event.page,
+              steps: event.steps,
+              path: event.path,
             });
             break;
           case "player_finished":
             dispatch({
               type: "PLAYER_FINISHED",
-              playerId: data.playerId,
-              finishTime: data.finishTime,
-              steps: data.steps,
+              playerId: event.playerId,
+              finishTime: event.finishTime,
+              steps: event.steps,
             });
             break;
           case "player_gave_up":
             dispatch({
               type: "PLAYER_GAVE_UP",
-              playerId: data.playerId,
+              playerId: event.playerId,
             });
             break;
           case "game_started":
-            dispatch({ type: "GAME_STARTED", startTime: data.startTime });
+            dispatch({
+              type: "GAME_STARTED",
+              startTime: event.startTime,
+            });
             break;
           case "game_restarted":
-            dispatch({ type: "SET_ROOM", room: data.room });
+            dispatch({ type: "SET_ROOM", room: event.room });
+            break;
+          case "player_left":
+            dispatch({
+              type: "PLAYER_LEFT",
+              playerId: event.playerId,
+              newHostId: event.newHostId,
+            });
             break;
         }
       } catch (err) {
