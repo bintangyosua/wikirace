@@ -8,6 +8,7 @@ import { ArticleRenderer } from "@/components/article-renderer";
 import { ArticleSearch } from "@/components/article-search";
 import { PlayerSidebar } from "@/components/player-sidebar";
 import { PlayerCard } from "@/components/player-card";
+import { ResultsView } from "@/components/results-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +69,7 @@ export function GameView({ roomId }: GameViewProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [givingUp, setGivingUp] = useState(false);
   const [showGiveUpDialog, setShowGiveUpDialog] = useState(false);
+  const [showResultsModal, setShowResultsModal] = useState(false);
 
   // Article selection state (for host in waiting room)
   const [useCustomPages, setUseCustomPages] = useState(false);
@@ -124,15 +126,20 @@ export function GameView({ roomId }: GameViewProps) {
     }
   }, [room, playerId]);
 
-  // Redirect to results when player's game is finished
+  // Auto-open results when player finishes
   useEffect(() => {
     if (room && playerId && room.players[playerId]?.finished) {
-      const timer = setTimeout(() => {
-        router.push(`/room/${roomId}/results`);
-      }, 2000);
-      return () => clearTimeout(timer);
+      if (room.status === "finished") {
+        // Automatically show for everyone when game is fully complete
+        const timer = setTimeout(() => setShowResultsModal(true), 2000);
+        return () => clearTimeout(timer);
+      } else {
+        // Show immediately locally for the player who just finished/gave up
+        const timer = setTimeout(() => setShowResultsModal(true), 2000);
+        return () => clearTimeout(timer);
+      }
     }
-  }, [room, playerId, roomId, router]);
+  }, [room?.status, room?.players, playerId]);
 
   // Real-time broadcast for custom articles
   useEffect(() => {
@@ -657,12 +664,13 @@ export function GameView({ roomId }: GameViewProps) {
               {/* Back / Give Up / Results buttons */}
               {me?.finished ? (
                 <Button
-                  onClick={() => router.push(`/room/${roomId}/results`)}
+                  onClick={() => setShowResultsModal(true)}
                   size="sm"
-                  className="gap-1.5 shrink-0"
+                  variant="default"
+                  className="gap-1.5 shrink-0 bg-primary/20 text-primary hover:bg-primary/30 shadow-none border border-primary/20"
                 >
                   <Trophy className="size-4" />
-                  <span className="hidden sm:inline">Results</span>
+                  <span className="hidden sm:inline">View Results</span>
                 </Button>
               ) : (
                 room.status === "playing" && (
@@ -823,6 +831,17 @@ export function GameView({ roomId }: GameViewProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Results Overlay */}
+      {showResultsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <ResultsView
+            room={room}
+            playerId={playerId}
+            onClose={() => setShowResultsModal(false)}
+          />
+        </div>
+      )}
     </>
   );
 }

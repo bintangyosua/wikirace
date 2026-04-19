@@ -25,10 +25,13 @@ import {
   RotateCcw,
   Flag,
   Loader2,
+  X as XIcon,
 } from "lucide-react";
 
 interface ResultsViewProps {
-  roomId: string;
+  room: SerializedRoom | null;
+  playerId: string;
+  onClose: () => void;
 }
 
 const rankIcons: Record<number, React.ReactNode> = {
@@ -43,60 +46,29 @@ const rankColors: Record<number, string> = {
   2: "from-amber-700/20 to-amber-700/5 border-amber-700/30",
 };
 
-export function ResultsView({ roomId }: ResultsViewProps) {
+export function ResultsView({ room, playerId, onClose }: ResultsViewProps) {
   const router = useRouter();
-  const [room, setRoom] = useState<SerializedRoom | null>(null);
-  const [playerId, setPlayerId] = useState<string>("");
-  const [loading, setLoading] = useState(true);
   const [restarting, setRestarting] = useState(false);
 
-  useEffect(() => {
-    const id = sessionStorage.getItem("wikirace_player_id") || "";
-    setPlayerId(id);
-
-    async function fetchRoom() {
-      try {
-        const res = await fetch(`/api/rooms/${roomId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setRoom(data.room);
-        }
-      } catch (err) {
-        console.error("Failed to fetch room:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchRoom();
-  }, [roomId]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-muted-foreground">Loading results...</div>
-      </div>
-    );
-  }
-
-  if (!room) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <p className="text-muted-foreground">Room not found</p>
-        <Button variant="outline" onClick={() => router.push("/")}>
-          Back to Lobby
-        </Button>
-      </div>
-    );
-  }
+  if (!room) return null;
 
   const players = Object.values(room.players);
   const ranked = rankPlayers(players);
 
   return (
-    <div className="flex flex-col items-center min-h-screen p-6 md:p-10">
-      <div className="w-full max-w-2xl space-y-8">
-        {/* Header */}
+    <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-background border border-border shadow-2xl rounded-2xl p-6 sm:p-8 space-y-8 animate-in zoom-in-95 duration-200">
+      {/* Close Button top-right */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onClose}
+        className="absolute top-3 right-3 rounded-full hover:bg-muted"
+      >
+        <XIcon className="size-5" />
+        <span className="sr-only">Close</span>
+      </Button>
+
+      {/* Header */}
         <div className="text-center space-y-3">
           <div className="text-5xl">🏁</div>
           <h1 className="text-3xl font-bold">Race Results</h1>
@@ -206,13 +178,13 @@ export function ResultsView({ roomId }: ResultsViewProps) {
               onClick={async () => {
                 setRestarting(true);
                 try {
-                  const res = await fetch(`/api/rooms/${roomId}/restart`, {
+                  const res = await fetch(`/api/rooms/${room.id}/restart`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ playerId }),
                   });
                   if (res.ok) {
-                    router.push(`/room/${roomId}`);
+                    onClose(); // Close modal, GameView handles redirect to waiting room
                   }
                 } catch (err) {
                   console.error("Failed to restart:", err);
@@ -232,15 +204,14 @@ export function ResultsView({ roomId }: ResultsViewProps) {
             </Button>
           ) : (
             <Button
-              onClick={() => router.push(`/room/${roomId}`)}
+              onClick={onClose}
               className="gap-2"
             >
               <ArrowRight className="size-4" />
-              Back to Room
+              Close Results
             </Button>
           )}
         </div>
-      </div>
     </div>
   );
 }

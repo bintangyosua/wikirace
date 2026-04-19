@@ -140,8 +140,10 @@
   line-height: 1.6;
   color: #202122;
   word-wrap: break-word;
+  overflow-wrap: break-word;
   max-width: 960px;
   margin: 0 auto;
+  overflow-x: hidden;
 }
 
 .wiki-title {
@@ -262,6 +264,10 @@
   color: #202122;
   border-collapse: collapse;
   margin: 1em 0;
+  max-width: 100%;
+  table-layout: auto;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .wiki-content table.wikitable,
@@ -317,8 +323,30 @@
   clear: right;
   font-size: 88%;
   line-height: 1.5em;
-  max-width: 22em;
+  width: 22em !important;
+  max-width: 22em !important;
   overflow: hidden;
+  table-layout: fixed !important;
+  box-sizing: border-box;
+}
+
+.wiki-content .infobox td,
+.wiki-content .infobox th {
+  max-width: 100% !important;
+  width: auto !important;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.wiki-content .infobox img {
+  max-width: 100% !important;
+  height: auto !important;
+  width: auto !important;
+}
+
+.wiki-content .infobox audio,
+.wiki-content .infobox video {
+  max-width: 100% !important;
 }
 
 .wiki-content .infobox caption,
@@ -373,11 +401,13 @@
   max-width: 100%;
   height: auto;
   vertical-align: middle;
+  width: auto;
 }
 
 .wiki-content .thumb {
   margin: 0.5em 0 1.3em;
   overflow: hidden;
+  max-width: 100%;
 }
 
 .wiki-content .thumb.tright {
@@ -409,6 +439,8 @@
   text-align: center;
   overflow: hidden;
   min-width: 100px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .wiki-content .thumbcaption {
@@ -438,6 +470,12 @@
   float: right;
   margin: 0.5em 0 1.3em 1.4em;
   max-width: 300px;
+}
+
+.wiki-content figure img {
+  max-width: 100%;
+  height: auto;
+  width: auto;
 }
 
 .wiki-content figure figcaption {
@@ -624,7 +662,14 @@
 /* ── Responsive: unstack on small screens ────────────────── */
 @media (max-width: 720px) {
   .wiki-content .infobox,
-  .wiki-content .sidebar,
+  .wiki-content .sidebar {
+    float: none !important;
+    clear: both;
+    margin: 0.5em auto !important;
+    width: auto !important;
+    max-width: 22em !important;
+  }
+
   .wiki-content .thumb.tright,
   .wiki-content .thumb.tleft,
   .wiki-content figure[typeof~="mw:File/Thumb"],
@@ -635,12 +680,14 @@
     max-width: 100%;
   }
 
-  .wiki-content .infobox {
+  .wiki-content div.thumbinner {
     max-width: 100%;
-    width: 100%;
   }
 
-  .wiki-content div.thumbinner {
+  .wiki-content table:not(.infobox) {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
     max-width: 100%;
   }
 }
