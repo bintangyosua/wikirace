@@ -18,6 +18,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { generatePlayerId } from "@/lib/game-utils";
+import { joinByLinkSchema } from "@/lib/validations";
+import { AlertCircle } from "lucide-react";
 import {
   Copy,
   Check,
@@ -53,6 +55,7 @@ export function GameView({ roomId }: GameViewProps) {
   const [nameInput, setNameInput] = useState("");
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState("");
+  const [nameFieldError, setNameFieldError] = useState("");
 
   // Load player info from sessionStorage
   useEffect(() => {
@@ -105,13 +108,16 @@ export function GameView({ roomId }: GameViewProps) {
 
   // ── Join via link: enter name and join ─────────────────────
   const handleLinkJoin = async () => {
-    if (!nameInput.trim()) {
-      setJoinError("Please enter your name");
+    setNameFieldError("");
+    setJoinError("");
+
+    const result = joinByLinkSchema.safeParse({ name: nameInput });
+    if (!result.success) {
+      setNameFieldError(result.error.issues[0].message);
       return;
     }
 
     setJoining(true);
-    setJoinError("");
 
     try {
       let id = sessionStorage.getItem("wikirace_player_id");
@@ -119,14 +125,14 @@ export function GameView({ roomId }: GameViewProps) {
         id = generatePlayerId();
         sessionStorage.setItem("wikirace_player_id", id);
       }
-      sessionStorage.setItem("wikirace_player_name", nameInput.trim());
+      sessionStorage.setItem("wikirace_player_name", result.data.name);
 
       const res = await fetch(`/api/rooms/${roomId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           playerId: id,
-          playerName: nameInput.trim(),
+          playerName: result.data.name,
         }),
       });
 
@@ -136,7 +142,7 @@ export function GameView({ roomId }: GameViewProps) {
       }
 
       setPlayerId(id);
-      setPlayerName(nameInput.trim());
+      setPlayerName(result.data.name);
       setNeedsName(false);
     } catch (err) {
       setJoinError(err instanceof Error ? err.message : "Something went wrong");
@@ -233,7 +239,7 @@ export function GameView({ roomId }: GameViewProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="space-y-2">
+            <div className="space-y-1">
               <label htmlFor="join-name" className="text-sm font-medium">
                 Your Name
               </label>
@@ -241,17 +247,30 @@ export function GameView({ roomId }: GameViewProps) {
                 id="join-name"
                 placeholder="Enter your name..."
                 value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
+                onChange={(e) => {
+                  setNameInput(e.target.value);
+                  if (nameFieldError) setNameFieldError("");
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleLinkJoin();
                 }}
                 maxLength={20}
                 disabled={joining}
                 autoFocus
+                className={nameFieldError ? "border-destructive/60 focus-visible:ring-destructive/30" : ""}
               />
+              {nameFieldError && (
+                <p className="flex items-center gap-1.5 text-[13px] text-destructive mt-1.5 animate-in slide-in-from-top-1 fade-in duration-200">
+                  <AlertCircle className="size-3.5 shrink-0" />
+                  {nameFieldError}
+                </p>
+              )}
             </div>
             {joinError && (
-              <p className="text-sm text-destructive text-center">{joinError}</p>
+              <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/5 border border-destructive/20 rounded-lg px-3 py-2.5">
+                <AlertCircle className="size-4 shrink-0" />
+                {joinError}
+              </div>
             )}
             <Button
               onClick={handleLinkJoin}

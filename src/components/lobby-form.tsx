@@ -13,7 +13,23 @@ import {
 } from "@/components/ui/card";
 import { ArticleSearch } from "@/components/article-search";
 import { generatePlayerId } from "@/lib/game-utils";
-import { Globe, Users, Zap, ArrowRight, Loader2, Shuffle } from "lucide-react";
+import {
+  createRoomSchema,
+  joinRoomSchema,
+  getFieldErrors,
+} from "@/lib/validations";
+import { Globe, Users, Zap, ArrowRight, Loader2, Shuffle, AlertCircle } from "lucide-react";
+
+/** Inline field error shown below each input */
+function FieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return (
+    <p className="flex items-center gap-1.5 text-[13px] text-destructive mt-1.5 animate-in slide-in-from-top-1 fade-in duration-200">
+      <AlertCircle className="size-3.5 shrink-0" />
+      {message}
+    </p>
+  );
+}
 
 export function LobbyForm() {
   const router = useRouter();
@@ -24,7 +40,13 @@ export function LobbyForm() {
   const [targetPage, setTargetPage] = useState("");
   const [useCustomPages, setUseCustomPages] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [serverError, setServerError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const clearErrors = () => {
+    setFieldErrors({});
+    setServerError("");
+  };
 
   const getOrCreatePlayerId = (): string => {
     let id = sessionStorage.getItem("wikirace_player_id");
@@ -36,36 +58,29 @@ export function LobbyForm() {
   };
 
   const handleCreate = async () => {
-    if (!playerName.trim()) {
-      setError("Please enter your name");
+    clearErrors();
+
+    const result = createRoomSchema.safeParse({
+      playerName,
+      useCustomPages,
+      startPage: startPage || undefined,
+      targetPage: targetPage || undefined,
+    });
+
+    if (!result.success) {
+      setFieldErrors(getFieldErrors(result.error));
       return;
     }
 
-    if (useCustomPages) {
-      if (!startPage) {
-        setError("Please select a start article");
-        return;
-      }
-      if (!targetPage) {
-        setError("Please select a target article");
-        return;
-      }
-      if (startPage === targetPage) {
-        setError("Start and target must be different articles");
-        return;
-      }
-    }
-
     setLoading(true);
-    setError("");
 
     try {
       const playerId = getOrCreatePlayerId();
-      sessionStorage.setItem("wikirace_player_name", playerName.trim());
+      sessionStorage.setItem("wikirace_player_name", result.data.playerName);
 
       const body: Record<string, string> = {
         hostId: playerId,
-        hostName: playerName.trim(),
+        hostName: result.data.playerName,
       };
 
       if (useCustomPages && startPage && targetPage) {
@@ -87,45 +102,54 @@ export function LobbyForm() {
       const data = await res.json();
       router.push(`/room/${data.roomId}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setServerError(
+        err instanceof Error ? err.message : "Something went wrong"
+      );
       setLoading(false);
     }
   };
 
   const handleJoin = async () => {
-    if (!playerName.trim()) {
-      setError("Please enter your name");
-      return;
-    }
-    if (!roomCode.trim()) {
-      setError("Please enter a room code");
+    clearErrors();
+
+    const result = joinRoomSchema.safeParse({
+      playerName,
+      roomCode: roomCode.toUpperCase(),
+    });
+
+    if (!result.success) {
+      setFieldErrors(getFieldErrors(result.error));
       return;
     }
 
     setLoading(true);
-    setError("");
 
     try {
       const playerId = getOrCreatePlayerId();
-      sessionStorage.setItem("wikirace_player_name", playerName.trim());
+      sessionStorage.setItem("wikirace_player_name", result.data.playerName);
 
-      const res = await fetch(`/api/rooms/${roomCode.trim().toUpperCase()}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          playerId,
-          playerName: playerName.trim(),
-        }),
-      });
+      const res = await fetch(
+        `/api/rooms/${result.data.roomCode}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            playerId,
+            playerName: result.data.playerName,
+          }),
+        }
+      );
 
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to join room");
       }
 
-      router.push(`/room/${roomCode.trim().toUpperCase()}`);
+      router.push(`/room/${result.data.roomCode}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setServerError(
+        err instanceof Error ? err.message : "Something went wrong"
+      );
       setLoading(false);
     }
   };
@@ -135,7 +159,7 @@ export function LobbyForm() {
       {/* Mode Toggle */}
       <div className="flex gap-1 rounded-lg bg-muted p-1">
         <button
-          onClick={() => { setMode("create"); setError(""); }}
+          onClick={() => { setMode("create"); clearErrors(); }}
           className={`rounded-md px-4 py-2 text-sm font-medium transition-all ${
             mode === "create"
               ? "bg-background text-foreground shadow-sm"
@@ -145,7 +169,7 @@ export function LobbyForm() {
           Create Room
         </button>
         <button
-          onClick={() => { setMode("join"); setError(""); }}
+          onClick={() => { setMode("join"); clearErrors(); }}
           className={`rounded-md px-4 py-2 text-sm font-medium transition-all ${
             mode === "join"
               ? "bg-background text-foreground shadow-sm"
@@ -169,7 +193,8 @@ export function LobbyForm() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <div className="space-y-2">
+          {/* Player Name */}
+          <div className="space-y-1">
             <label htmlFor="player-name" className="text-sm font-medium">
               Your Name
             </label>
@@ -177,17 +202,30 @@ export function LobbyForm() {
               id="player-name"
               placeholder="Enter your name..."
               value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
+              onChange={(e) => {
+                setPlayerName(e.target.value);
+                if (fieldErrors.playerName) {
+                  setFieldErrors((prev) => {
+                    const next = { ...prev };
+                    delete next.playerName;
+                    return next;
+                  });
+                }
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && mode === "join") handleJoin();
+                if (e.key === "Enter" && mode === "create") handleCreate();
               }}
               maxLength={20}
               disabled={loading}
+              className={fieldErrors.playerName ? "border-destructive/60 focus-visible:ring-destructive/30" : ""}
             />
+            <FieldError message={fieldErrors.playerName} />
           </div>
 
+          {/* Room Code (Join mode) */}
           {mode === "join" && (
-            <div className="space-y-2">
+            <div className="space-y-1">
               <label htmlFor="room-code" className="text-sm font-medium">
                 Room Code
               </label>
@@ -195,14 +233,26 @@ export function LobbyForm() {
                 id="room-code"
                 placeholder="e.g. ABC123"
                 value={roomCode}
-                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  setRoomCode(e.target.value.toUpperCase());
+                  if (fieldErrors.roomCode) {
+                    setFieldErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.roomCode;
+                      return next;
+                    });
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleJoin();
                 }}
                 maxLength={6}
-                className="uppercase tracking-widest text-center font-mono text-lg"
+                className={`uppercase tracking-widest text-center font-mono text-lg ${
+                  fieldErrors.roomCode ? "border-destructive/60 focus-visible:ring-destructive/30" : ""
+                }`}
                 disabled={loading}
               />
+              <FieldError message={fieldErrors.roomCode} />
             </div>
           )}
 
@@ -232,32 +282,60 @@ export function LobbyForm() {
 
               {useCustomPages ? (
                 <div className="space-y-3 rounded-lg border border-border/40 bg-muted/30 p-3">
-                  <ArticleSearch
-                    id="start-article"
-                    label="Start Article"
-                    placeholder="Type to search..."
-                    value={startPage}
-                    onChange={setStartPage}
-                  />
-                  <ArticleSearch
-                    id="target-article"
-                    label="Target Article"
-                    placeholder="Type to search..."
-                    value={targetPage}
-                    onChange={setTargetPage}
-                  />
+                  <div>
+                    <ArticleSearch
+                      id="start-article"
+                      label="Start Article"
+                      placeholder="Type to search..."
+                      value={startPage}
+                      onChange={(val) => {
+                        setStartPage(val);
+                        if (fieldErrors.startPage) {
+                          setFieldErrors((prev) => {
+                            const next = { ...prev };
+                            delete next.startPage;
+                            return next;
+                          });
+                        }
+                      }}
+                    />
+                    <FieldError message={fieldErrors.startPage} />
+                  </div>
+                  <div>
+                    <ArticleSearch
+                      id="target-article"
+                      label="Target Article"
+                      placeholder="Type to search..."
+                      value={targetPage}
+                      onChange={(val) => {
+                        setTargetPage(val);
+                        if (fieldErrors.targetPage) {
+                          setFieldErrors((prev) => {
+                            const next = { ...prev };
+                            delete next.targetPage;
+                            return next;
+                          });
+                        }
+                      }}
+                    />
+                    <FieldError message={fieldErrors.targetPage} />
+                  </div>
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground text-center py-2 bg-muted/30 rounded-lg border border-border/40">
                   <Shuffle className="size-3 inline mr-1" />
-                  Start & target articles will be randomly selected
+                  Start &amp; target articles will be randomly selected
                 </p>
               )}
             </div>
           )}
 
-          {error && (
-            <p className="text-sm text-destructive text-center">{error}</p>
+          {/* Server Error */}
+          {serverError && (
+            <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/5 border border-destructive/20 rounded-lg px-3 py-2.5">
+              <AlertCircle className="size-4 shrink-0" />
+              {serverError}
+            </div>
           )}
 
           <Button
