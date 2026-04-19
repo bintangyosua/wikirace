@@ -216,7 +216,12 @@ export function GameView({ roomId }: GameViewProps) {
       const body: Record<string, string> = { playerId };
 
       // If host chose custom articles, restart room with new articles first
-      if (room?.hostId === playerId && useCustomPages && editStartPage && editTargetPage) {
+      if (
+        room?.hostId === playerId &&
+        useCustomPages &&
+        editStartPage &&
+        editTargetPage
+      ) {
         await fetch(`/api/rooms/${roomId}/restart`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -270,7 +275,7 @@ export function GameView({ roomId }: GameViewProps) {
         setNavigating(false);
       }
     },
-    [navigating, room, roomId, playerId]
+    [navigating, room, roomId, playerId],
   );
 
   const handleGiveUp = useCallback(async () => {
@@ -331,7 +336,8 @@ export function GameView({ roomId }: GameViewProps) {
           <CardHeader className="text-center">
             <CardTitle className="text-xl">Join WikiRace</CardTitle>
             <CardDescription>
-              Enter your name to join room <span className="font-mono font-bold text-primary">{roomId}</span>
+              Enter your name to join room{" "}
+              <span className="font-mono font-bold text-primary">{roomId}</span>
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -353,7 +359,11 @@ export function GameView({ roomId }: GameViewProps) {
                 maxLength={20}
                 disabled={joining}
                 autoFocus
-                className={nameFieldError ? "border-destructive/60 focus-visible:ring-destructive/30" : ""}
+                className={
+                  nameFieldError
+                    ? "border-destructive/60 focus-visible:ring-destructive/30"
+                    : ""
+                }
               />
               {nameFieldError && (
                 <p className="flex items-center gap-1.5 text-[13px] text-destructive mt-1.5 animate-in slide-in-from-top-1 fade-in duration-200">
@@ -449,11 +459,7 @@ export function GameView({ roomId }: GameViewProps) {
           </p>
 
           {/* Share Button */}
-          <Button
-            variant="outline"
-            onClick={handleShare}
-            className="gap-2"
-          >
+          <Button variant="outline" onClick={handleShare} className="gap-2">
             <Share2 className="size-4" />
             Share Invite Link
           </Button>
@@ -594,164 +600,166 @@ export function GameView({ roomId }: GameViewProps) {
   // ── Game In Progress ──────────────────────────────────────
   return (
     <>
-    <div className="flex h-screen overflow-hidden">
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header Bar */}
-        <div className="shrink-0 px-2 py-1.5 sm:p-3 border-b border-border/40 bg-background/80 backdrop-blur-sm">
-          <div className="flex items-center gap-1.5 sm:gap-3">
-            <div className="flex-1 min-w-0">
-              <GameHeader
-                startPage={room.startPage}
-                targetPage={room.targetPage}
-                currentPage={currentPage}
-                startTime={room.startTime}
-                steps={me?.steps ?? 0}
-                finished={me?.finished ?? false}
-                finishTime={me?.finishTime ?? null}
-              />
+      <div className="flex h-screen overflow-hidden">
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Header Bar */}
+          <div className="shrink-0 px-2 py-1.5 sm:p-3 border-b border-border/40 bg-background/80 backdrop-blur-sm">
+            <div className="flex items-center gap-1.5 sm:gap-3">
+              <div className="flex-1 min-w-0">
+                <GameHeader
+                  startPage={room.startPage}
+                  targetPage={room.targetPage}
+                  currentPage={currentPage}
+                  startTime={room.startTime}
+                  steps={me?.steps ?? 0}
+                  finished={me?.finished ?? false}
+                  finishTime={me?.finishTime ?? null}
+                />
+              </div>
+
+              {/* Back / Give Up / Results buttons */}
+              {me?.finished ? (
+                <Button
+                  onClick={() => router.push(`/room/${roomId}/results`)}
+                  size="sm"
+                  className="gap-1.5 shrink-0"
+                >
+                  <Trophy className="size-4" />
+                  <span className="hidden sm:inline">Results</span>
+                </Button>
+              ) : (
+                room.status === "playing" && (
+                  <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                    {/* Back Button */}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={handleGoBack}
+                      disabled={goingBack || navigating || (me?.steps ?? 0) < 1}
+                      title="Go back to previous page"
+                      className="size-8 sm:size-9"
+                    >
+                      <Undo2 className="size-3.5 sm:size-4" />
+                    </Button>
+
+                    {/* Give Up Button */}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowGiveUpDialog(true)}
+                      disabled={givingUp}
+                      title="Give Up"
+                      className="size-8 sm:size-9 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive sm:w-auto sm:px-3 sm:gap-2"
+                    >
+                      {givingUp ? (
+                        <Loader2 className="size-3.5 sm:size-4 animate-spin" />
+                      ) : (
+                        <Flag className="size-3.5 sm:size-4" />
+                      )}
+                      <span className="hidden sm:inline text-sm">Give Up</span>
+                    </Button>
+                  </div>
+                )
+              )}
+
+              {/* Toggle Players Panel (mobile) — big tap target */}
+              <button
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="lg:hidden shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border/40 bg-card/60 hover:bg-card active:scale-95 transition-all min-h-[44px] min-w-[44px]"
+                aria-label="Toggle players panel"
+              >
+                <Users className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">
+                  {Object.keys(room.players).length}
+                </span>
+                <ChevronDown
+                  className={`size-3.5 text-muted-foreground transition-transform duration-200 ${
+                    sidebarOpen ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
             </div>
 
-            {/* Back / Give Up / Results buttons */}
-            {me?.finished ? (
-              <Button
-                onClick={() => router.push(`/room/${roomId}/results`)}
-                size="sm"
-                className="gap-1.5 shrink-0"
-              >
-                <Trophy className="size-4" />
-                <span className="hidden sm:inline">Results</span>
-              </Button>
-            ) : room.status === "playing" && (
-              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                {/* Back Button */}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleGoBack}
-                  disabled={goingBack || navigating || (me?.steps ?? 0) < 1}
-                  title="Go back to previous page"
-                  className="size-8 sm:size-9"
-                >
-                  <Undo2 className="size-3.5 sm:size-4" />
-                </Button>
-
-                {/* Give Up Button */}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowGiveUpDialog(true)}
-                  disabled={givingUp}
-                  title="Give Up"
-                  className="size-8 sm:size-9 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive sm:w-auto sm:px-3 sm:gap-2"
-                >
-                  {givingUp ? (
-                    <Loader2 className="size-3.5 sm:size-4 animate-spin" />
-                  ) : (
-                    <Flag className="size-3.5 sm:size-4" />
-                  )}
-                  <span className="hidden sm:inline text-sm">Give Up</span>
-                </Button>
+            {/* Connection indicator */}
+            {!connected && (
+              <div className="flex items-center gap-2 text-amber-600 text-xs mt-2">
+                <WifiOff className="size-3" />
+                Reconnecting...
               </div>
             )}
-
-            {/* Toggle Players Panel (mobile) — big tap target */}
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="lg:hidden shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border/40 bg-card/60 hover:bg-card active:scale-95 transition-all min-h-[44px] min-w-[44px]"
-              aria-label="Toggle players panel"
-            >
-              <Users className="size-4 text-muted-foreground" />
-              <span className="text-sm font-medium">
-                {Object.keys(room.players).length}
-              </span>
-              <ChevronDown
-                className={`size-3.5 text-muted-foreground transition-transform duration-200 ${
-                  sidebarOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
           </div>
 
-          {/* Connection indicator */}
-          {!connected && (
-            <div className="flex items-center gap-2 text-amber-600 text-xs mt-2">
-              <WifiOff className="size-3" />
-              Reconnecting...
-            </div>
-          )}
-        </div>
+          {/* Mobile Players Panel — slides down from top as overlay */}
+          <div className="lg:hidden relative">
+            {sidebarOpen && (
+              <>
+                {/* Backdrop */}
+                <div
+                  className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-200"
+                  onClick={() => setSidebarOpen(false)}
+                  style={{ top: 0 }}
+                />
 
-        {/* Mobile Players Panel — slides down from top as overlay */}
-        <div className="lg:hidden relative">
-          {sidebarOpen && (
-            <>
-              {/* Backdrop */}
-              <div
-                className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-200"
-                onClick={() => setSidebarOpen(false)}
-                style={{ top: 0 }}
-              />
-
-              {/* Panel */}
-              <div
-                className="absolute left-0 right-0 z-50 max-h-[60vh] overflow-y-auto border-b border-border/40 bg-background/95 backdrop-blur-xl shadow-2xl shadow-black/20 rounded-b-2xl animate-in slide-in-from-top duration-300"
-              >
-                {/* Panel header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border/20 sticky top-0 bg-background/90 backdrop-blur-sm z-10">
-                  <div className="flex items-center gap-2">
-                    <Users className="size-4 text-primary" />
-                    <span className="text-sm font-semibold">Players</span>
-                    <span className="text-xs text-muted-foreground">({Object.keys(room.players).length})</span>
+                {/* Panel */}
+                <div className="absolute left-0 right-0 z-50 max-h-[60vh] overflow-y-auto border-b border-border/40 bg-background/95 backdrop-blur-xl shadow-2xl shadow-black/20 rounded-b-2xl animate-in slide-in-from-top duration-300">
+                  {/* Panel header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-border/20 sticky top-0 bg-background/90 backdrop-blur-sm z-10">
+                    <div className="flex items-center gap-2">
+                      <Users className="size-4 text-primary" />
+                      <span className="text-sm font-semibold">Players</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({Object.keys(room.players).length})
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => setSidebarOpen(false)}
+                      className="flex items-center justify-center size-9 rounded-lg hover:bg-muted/60 active:scale-95 transition-all"
+                      aria-label="Close players panel"
+                    >
+                      <X className="size-4" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setSidebarOpen(false)}
-                    className="flex items-center justify-center size-9 rounded-lg hover:bg-muted/60 active:scale-95 transition-all"
-                    aria-label="Close players panel"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
 
-                {/* Player cards */}
-                <div className="p-3 space-y-2">
-                  {Object.values(room.players).map((p) => (
-                    <PlayerCard
-                      key={p.id}
-                      player={p}
-                      isCurrentUser={p.id === playerId}
-                      isHost={p.id === room.hostId}
-                      targetPage={room.targetPage}
-                      gameStatus={room.status}
-                    />
-                  ))}
+                  {/* Player cards */}
+                  <div className="p-3 space-y-2">
+                    {Object.values(room.players).map((p) => (
+                      <PlayerCard
+                        key={p.id}
+                        player={p}
+                        isCurrentUser={p.id === playerId}
+                        isHost={p.id === room.hostId}
+                        targetPage={room.targetPage}
+                        gameStatus={room.status}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
+
+          {/* Article */}
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+            <ArticleRenderer
+              currentPage={currentPage}
+              onNavigate={handleNavigate}
+              disabled={me?.finished || room.status !== "playing"}
+            />
+          </div>
         </div>
 
-        {/* Article */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          <ArticleRenderer
-            currentPage={currentPage}
-            onNavigate={handleNavigate}
-            disabled={me?.finished || room.status !== "playing"}
+        {/* Desktop Sidebar — always visible on lg+ */}
+        <div className="hidden lg:block shrink-0 w-72 border-l border-border/40 bg-background/50 backdrop-blur-sm">
+          <PlayerSidebar
+            players={room.players}
+            currentPlayerId={playerId}
+            hostId={room.hostId}
+            targetPage={room.targetPage}
+            gameStatus={room.status}
           />
         </div>
       </div>
-
-      {/* Desktop Sidebar — always visible on lg+ */}
-      <div className="hidden lg:block shrink-0 w-72 border-l border-border/40 bg-background/50 backdrop-blur-sm">
-        <PlayerSidebar
-          players={room.players}
-          currentPlayerId={playerId}
-          hostId={room.hostId}
-          targetPage={room.targetPage}
-          gameStatus={room.status}
-        />
-      </div>
-    </div>
 
       {/* Give Up Confirmation Dialog */}
       <AlertDialog open={showGiveUpDialog} onOpenChange={setShowGiveUpDialog}>
@@ -759,15 +767,19 @@ export function GameView({ roomId }: GameViewProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Give up the race?</AlertDialogTitle>
             <AlertDialogDescription>
-              You&apos;ve taken <span className="font-mono font-bold text-foreground">{me?.steps ?? 0}</span> steps so far.
-              Giving up means you won&apos;t be ranked among the finishers. This action cannot be undone.
+              You&apos;ve taken{" "}
+              <span className="font-mono font-bold text-foreground">
+                {me?.steps ?? 0}{" "}
+              </span>{" "}
+              steps so far. Giving up means you won&apos;t be ranked among the
+              finishers. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep Going</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleGiveUp}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive/70 text-destructive-foreground hover:bg-destructive/80"
             >
               <Flag className="size-4 mr-2" />
               Give Up
