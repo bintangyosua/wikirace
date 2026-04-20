@@ -4,6 +4,25 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { WikiArticle } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 
+const ZERO_WIDTH_SEPARATORS = ["\u2060", "\u200b", "\u200c"] as const;
+
+function obfuscateForFindInPage(text: string): string {
+  let out = "";
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    out += ch;
+
+    if (/\s/.test(ch)) {
+      continue;
+    }
+
+    out += ZERO_WIDTH_SEPARATORS[i % ZERO_WIDTH_SEPARATORS.length];
+  }
+
+  return out;
+}
+
 interface ArticleRendererProps {
   currentPage: string;
   onNavigate: (title: string) => void;
@@ -69,6 +88,14 @@ export function ArticleRenderer({
   useLayoutEffect(() => {
     if (!contentRef.current || !article) return;
 
+    // Mobile Find-in-page may match text from attributes, so strip common searchable attrs.
+    for (const el of contentRef.current.querySelectorAll("[title],[aria-label],[alt],[placeholder]")) {
+      el.removeAttribute("title");
+      el.removeAttribute("aria-label");
+      el.removeAttribute("alt");
+      el.removeAttribute("placeholder");
+    }
+
     const walker = document.createTreeWalker(
       contentRef.current,
       NodeFilter.SHOW_TEXT
@@ -86,7 +113,7 @@ export function ArticleRenderer({
       if (!text || !text.trim()) continue;
 
       const span = document.createElement('span');
-      span.setAttribute('data-text', text);
+      span.setAttribute('data-text', obfuscateForFindInPage(text));
       textNode.parentNode?.replaceChild(span, textNode);
     }
   }, [article]);
