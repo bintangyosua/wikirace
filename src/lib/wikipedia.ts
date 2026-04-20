@@ -22,13 +22,6 @@ const articleCache = globalCache.__wikiArticleCache;
 const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 const MAX_CACHE_SIZE = 200; // max entries to prevent memory leak
 
-function stripInteractiveWikiUi(html: string): string {
-  return html
-    .replace(/<form\b[^>]*>[\s\S]*?<\/form>/gi, "")
-    .replace(/<(input|button|select|textarea)\b[^>]*\/?>(?:<\/\1>)?/gi, "")
-    .replace(/<label\b[^>]*>[\s\S]*?<\/label>/gi, "");
-}
-
 function getCachedArticle(title: string): WikiArticle | null {
   const key = title.trim().toLowerCase();
   const entry = articleCache.get(key);
@@ -38,15 +31,6 @@ function getCachedArticle(title: string): WikiArticle | null {
   if (Date.now() - entry.cachedAt > CACHE_TTL) {
     articleCache.delete(key);
     return null;
-  }
-
-  const sanitizedHtml = stripInteractiveWikiUi(entry.article.html);
-  if (sanitizedHtml !== entry.article.html) {
-    entry.article = {
-      ...entry.article,
-      html: sanitizedHtml,
-    };
-    entry.cachedAt = Date.now();
   }
 
   return entry.article;
@@ -107,7 +91,7 @@ export async function fetchArticle(title: string): Promise<WikiArticle> {
 
   const article: WikiArticle = {
     title: cleanTitle,
-    html: stripInteractiveWikiUi(html),
+    html: html,
   };
 
   // Store in cache
@@ -153,7 +137,7 @@ export async function getRandomArticles(count: number): Promise<string[]> {
         !title.includes("(disambiguation)") &&
         !title.startsWith("List of") &&
         !title.startsWith("Template:") &&
-        !title.startsWith("Category:")
+        !title.startsWith("Category:"),
     );
 
   return filtered.slice(0, count);
