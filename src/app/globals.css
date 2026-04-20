@@ -636,6 +636,16 @@
   vertical-align: middle;
 }
 
+/* ── Strip interactive controls from embedded wiki HTML ─── */
+.wiki-content form,
+.wiki-content input,
+.wiki-content select,
+.wiki-content textarea,
+.wiki-content button,
+.wiki-content [role="search"] {
+  display: none !important;
+}
+
 /* ── Clear floats ────────────────────────────────────────── */
 .wiki-content::after {
   content: "";

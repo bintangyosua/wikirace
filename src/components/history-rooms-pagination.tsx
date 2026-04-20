@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   type ColumnDef,
+  type OnChangeFn,
   type PaginationState,
   getCoreRowModel,
   getPaginationRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -121,15 +123,78 @@ const columns: ColumnDef<HistoryRoomGroupData>[] = [
   },
 ];
 
+const PAGE_SIZE_OPTIONS = [3, 5, 10, 20] as const;
+const DEFAULT_PAGE_SIZE = 5;
+
+function parsePositiveInt(value: string | null, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+function parsePageSize(value: string | null): number {
+  const parsed = parsePositiveInt(value, DEFAULT_PAGE_SIZE);
+
+  return PAGE_SIZE_OPTIONS.includes(
+    parsed as (typeof PAGE_SIZE_OPTIONS)[number],
+  )
+    ? parsed
+    : DEFAULT_PAGE_SIZE;
+}
+
+function clampPage(page: number, pageSize: number, totalRows: number): number {
+  const maxPage = Math.max(1, Math.ceil(totalRows / pageSize));
+  return Math.min(Math.max(page, 1), maxPage);
+}
+
 export function HistoryRoomsPagination({
   rooms,
 }: {
   rooms: HistoryRoomGroupData[];
 }) {
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 5,
-  });
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const pageFromParams = clampPage(
+    parsePositiveInt(searchParams.get("page"), 1),
+    parsePageSize(searchParams.get("size")),
+    rooms.length,
+  );
+  const sizeFromParams = parsePageSize(searchParams.get("size"));
+
+  const [pagination, setPagination] = useState<PaginationState>(() => ({
+    pageIndex: pageFromParams - 1,
+    pageSize: sizeFromParams,
+  }));
+  const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>(
+    {},
+  );
+
+  useEffect(() => {
+    setPagination((current) => {
+      const next = {
+        pageIndex: pageFromParams - 1,
+        pageSize: sizeFromParams,
+      };
+
+      if (
+        current.pageIndex === next.pageIndex &&
+        current.pageSize === next.pageSize
+      ) {
+        return current;
+      }
+
+      return next;
+    });
+  }, [pageFromParams, sizeFromParams]);
 
   const sortedRooms = useMemo(
     () =>
@@ -139,6 +204,52 @@ export function HistoryRoomsPagination({
     [rooms],
   );
 
+  useEffect(() => {
+    const desiredPage = clampPage(
+      pagination.pageIndex + 1,
+      pagination.pageSize,
+      rooms.length,
+    );
+    const desiredSize = pagination.pageSize;
+
+    const currentPage = parsePositiveInt(searchParams.get("page"), 1);
+    const currentSize = parsePageSize(searchParams.get("size"));
+
+    if (currentPage === desiredPage && currentSize === desiredSize) {
+      return;
+    }
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", String(desiredPage));
+    params.set("size", String(desiredSize));
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [
+    pagination.pageIndex,
+    pagination.pageSize,
+    pathname,
+    rooms.length,
+    router,
+    searchParams,
+  ]);
+
+  const handlePaginationChange: OnChangeFn<PaginationState> = (updater) => {
+    setPagination((current) => {
+      const nextRaw =
+        typeof updater === "function" ? updater(current) : updater;
+      const nextPage = clampPage(
+        nextRaw.pageIndex + 1,
+        nextRaw.pageSize,
+        rooms.length,
+      );
+      const next: PaginationState = {
+        pageIndex: nextPage - 1,
+        pageSize: nextRaw.pageSize,
+      };
+
+      return next;
+    });
+  };
+
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: sortedRooms,
@@ -146,7 +257,7 @@ export function HistoryRoomsPagination({
     state: {
       pagination,
     },
-    onPaginationChange: setPagination,
+    onPaginationChange: handlePaginationChange,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
   });
@@ -184,7 +295,7 @@ export function HistoryRoomsPagination({
                   table.setPageIndex(0);
                 }}
               >
-                {[3, 5, 10, 20].map((size) => (
+                {PAGE_SIZE_OPTIONS.map((size) => (
                   <option key={size} value={size}>
                     {size}
                   </option>
@@ -197,10 +308,22 @@ export function HistoryRoomsPagination({
 
       {roomRows.map((row) => {
         const roomGroup = row.original;
-        const totalPlayers = roomGroup.games.reduce(
+        const totalPlayerEntries = roomGroup.games.reduce(
           (sum, game) => sum + game.playerCount,
           0,
         );
+        const uniquePlayerIds = new Set<string>();
+        for (const game of roomGroup.games) {
+          const snapshotPlayers = Array.isArray(game.snapshot?.players)
+            ? game.snapshot.players
+            : [];
+
+          for (const player of snapshotPlayers) {
+            uniquePlayerIds.add(player.playerId);
+          }
+        }
+
+        const uniquePlayers = uniquePlayerIds.size;
         const latestGame = roomGroup.games[0];
 
         return (
@@ -211,11 +334,12 @@ export function HistoryRoomsPagination({
                   Room {roomGroup.roomCode}
                 </CardTitle>
                 <Badge variant="outline">{roomGroup.games.length} games</Badge>
-                <Badge variant="outline">{totalPlayers} player entries</Badge>
+                <Badge variant="outline">{uniquePlayers} players</Badge>
               </div>
               <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                 <span>Host: {roomGroup.hostId}</span>
                 <span>Latest: {formatDate(latestGame.createdAt)}</span>
+                <span>Total Entries: {totalPlayerEntries}</span>
               </CardDescription>
             </CardHeader>
 
@@ -278,6 +402,15 @@ export function HistoryRoomsPagination({
                       <div className="mt-2 space-y-1.5">
                         {players.map((player, index) => {
                           const path = toPath(player.path);
+                          const pathKey = `${game.id}:${player.playerId}:${index}`;
+                          const isPathExpanded =
+                            expandedPaths[pathKey] ?? false;
+                          const pathText =
+                            path.length === 0
+                              ? "No path"
+                              : isPathExpanded
+                                ? path.join(" -> ")
+                                : summarizePath(path);
 
                           return (
                             <div
@@ -308,9 +441,31 @@ export function HistoryRoomsPagination({
                                 <span>
                                   Finish: {formatElapsed(player.finishTime)}
                                 </span>
-                                <span className="truncate text-muted-foreground">
-                                  Path: {summarizePath(path)}
-                                </span>
+                              </div>
+                              <div className="mt-1 flex items-start justify-between gap-2">
+                                <p
+                                  className={`text-xs text-muted-foreground ${
+                                    isPathExpanded
+                                      ? "whitespace-normal wrap-break-word"
+                                      : "truncate"
+                                  }`}
+                                >
+                                  Path: {pathText}
+                                </p>
+                                {path.length > 3 && (
+                                  <button
+                                    type="button"
+                                    className="shrink-0 text-[11px] font-medium text-foreground/80 hover:text-foreground"
+                                    onClick={() => {
+                                      setExpandedPaths((current) => ({
+                                        ...current,
+                                        [pathKey]: !isPathExpanded,
+                                      }));
+                                    }}
+                                  >
+                                    {isPathExpanded ? "Hide" : "Show full"}
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );
