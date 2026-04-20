@@ -29,6 +29,7 @@ model Room {
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
   players    RoomPlayer[]
+  histories  RoomHistory[]
 
   @@index([createdAt])
 }
@@ -38,7 +39,7 @@ model RoomPlayer {
   playerId   String
   name       String
   currentPage String
-  path       String[]
+  path       String[] @default([])
   finished   Boolean  @default(false)
   gaveUp     Boolean  @default(false)
   finishTime BigInt?
@@ -51,5 +52,26 @@ model RoomPlayer {
 
   @@unique([roomId, playerId])
   @@index([roomId])
+}
+
+model RoomHistory {
+  id          String     @id @default(cuid())
+  roomId      String
+  roomCode    String
+  gameNumber  Int
+  startPage   String
+  targetPage  String
+  startTime   BigInt?
+  status      RoomStatus
+  hostId      String
+  playerCount Int
+  snapshot    Json
+  createdAt   DateTime   @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@index([roomCode, createdAt])
+  @@unique([roomId, gameNumber])
 }
 

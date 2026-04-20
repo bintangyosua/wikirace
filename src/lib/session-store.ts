@@ -27,6 +27,96 @@ async function fetchRoomWithPlayers(roomId: string) {
 type DbRoom = NonNullable<Awaited<ReturnType<typeof fetchRoomWithPlayers>>>;
 type DbPlayer = DbRoom["players"][number];
 
+type HistoryTx = Pick<typeof prisma, "room" | "roomHistory" | "roomPlayer">;
+
+async function createRoomHistorySnapshot(
+  tx: HistoryTx,
+  room: DbRoom,
+): Promise<void> {
+  const latestHistory = await tx.roomHistory.aggregate({
+    where: { roomId: room.id },
+    _max: { gameNumber: true },
+  });
+
+  const nextGameNumber = (latestHistory._max.gameNumber ?? 0) + 1;
+
+  await tx.roomHistory.create({
+    data: {
+      roomId: room.id,
+      roomCode: room.roomId,
+      gameNumber: nextGameNumber,
+      startPage: room.startPage,
+      targetPage: room.targetPage,
+      startTime: room.startTime,
+      status: room.status,
+      hostId: room.hostId,
+      playerCount: room.players.length,
+      snapshot: {
+        room: {
+          roomCode: room.roomId,
+          status: room.status,
+          startPage: room.startPage,
+          targetPage: room.targetPage,
+          startTime: room.startTime === null ? null : Number(room.startTime),
+          hostId: room.hostId,
+          createdAt: room.createdAt.toISOString(),
+          updatedAt: room.updatedAt.toISOString(),
+        },
+        players: room.players.map((player) => ({
+          playerId: player.playerId,
+          name: player.name,
+          currentPage: player.currentPage,
+          path: [...player.path],
+          finished: player.finished,
+          gaveUp: player.gaveUp,
+          finishTime:
+            player.finishTime === null ? null : Number(player.finishTime),
+          steps: player.steps,
+          createdAt: player.createdAt.toISOString(),
+          updatedAt: player.updatedAt.toISOString(),
+        })),
+      },
+    },
+  });
+}
+
+async function archiveRoomById(tx: HistoryTx, roomId: string): Promise<void> {
+  const room = await tx.room.findUnique({
+    where: { id: roomId },
+    include: {
+      players: {
+        orderBy: { createdAt: "asc" },
+      },
+    },
+  });
+
+  if (!room) {
+    return;
+  }
+
+  await createRoomHistorySnapshot(tx, room as DbRoom);
+}
+
+function shouldArchiveRoomBeforeRestart(
+  room: Pick<DbRoom, "status" | "startTime" | "players">,
+): boolean {
+  if (room.status === "finished") {
+    return false;
+  }
+
+  if (room.startTime !== null || room.status !== "waiting") {
+    return true;
+  }
+
+  return room.players.some(
+    (player) =>
+      player.steps > 0 ||
+      player.finished ||
+      player.gaveUp ||
+      player.path.length > 1,
+  );
+}
+
 function dbPlayerToPlayer(player: DbPlayer): Player {
   return {
     id: player.playerId,
@@ -164,15 +254,16 @@ export async function startGame(roomId: string): Promise<Room | null> {
 
   const startTime = Date.now();
 
-  await prisma.$transaction([
-    prisma.room.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.room.update({
       where: { id: room.id },
       data: {
         status: "playing",
         startTime: BigInt(startTime),
       },
-    }),
-    prisma.roomPlayer.updateMany({
+    });
+
+    await tx.roomPlayer.updateMany({
       where: { roomId: room.id },
       data: {
         currentPage: room.startPage,
@@ -184,8 +275,8 @@ export async function startGame(roomId: string): Promise<Room | null> {
         gaveUp: false,
         finishTime: null,
       },
-    }),
-  ]);
+    });
+  });
 
   const updatedRoom = await fetchRoomWithPlayers(roomId);
   if (!updatedRoom) return null;
@@ -304,10 +395,19 @@ export async function updatePlayerNavigation(
       });
 
       if (unfinished === 0) {
-        await tx.room.update({
-          where: { id: room.id },
+        const roomTransition = await tx.room.updateMany({
+          where: {
+            id: room.id,
+            status: {
+              not: "finished",
+            },
+          },
           data: { status: "finished" },
         });
+
+        if (roomTransition.count > 0) {
+          await archiveRoomById(tx, room.id);
+        }
       }
     }
 
@@ -368,11 +468,13 @@ export async function goBackPlayer(
       return { ok: false as const };
     }
 
-    if (player.path.length <= 1) {
+    const currentPath = player.path;
+
+    if (currentPath.length <= 1) {
       return { ok: false as const };
     }
 
-    const path = player.path.slice(0, -1);
+    const path = currentPath.slice(0, -1);
     const currentPage = path[path.length - 1];
     const steps = path.length - 1;
 
@@ -460,13 +562,21 @@ async function finishPlayerInternal(
 
     const finishTime = now - Number(room.startTime);
 
-    const updatedPlayer = await tx.roomPlayer.update({
+    await tx.roomPlayer.update({
       where: { id: player.id },
       data: {
         finished: true,
         finishTime: BigInt(finishTime),
       },
     });
+
+    const updatedPlayer = await tx.roomPlayer.findUnique({
+      where: { id: player.id },
+    });
+
+    if (!updatedPlayer) {
+      return { ok: false as const };
+    }
 
     const unfinished = await tx.roomPlayer.count({
       where: {
@@ -476,10 +586,19 @@ async function finishPlayerInternal(
     });
 
     if (unfinished === 0) {
-      await tx.room.update({
-        where: { id: room.id },
+      const roomTransition = await tx.room.updateMany({
+        where: {
+          id: room.id,
+          status: {
+            not: "finished",
+          },
+        },
         data: { status: "finished" },
       });
+
+      if (roomTransition.count > 0) {
+        await archiveRoomById(tx, room.id);
+      }
     }
 
     return {
@@ -542,7 +661,7 @@ export async function giveUpPlayer(
       return { ok: false as const };
     }
 
-    const updatedPlayer = await tx.roomPlayer.update({
+    await tx.roomPlayer.update({
       where: { id: player.id },
       data: {
         finished: true,
@@ -550,6 +669,14 @@ export async function giveUpPlayer(
         finishTime: null,
       },
     });
+
+    const updatedPlayer = await tx.roomPlayer.findUnique({
+      where: { id: player.id },
+    });
+
+    if (!updatedPlayer) {
+      return { ok: false as const };
+    }
 
     const unfinished = await tx.roomPlayer.count({
       where: {
@@ -559,10 +686,19 @@ export async function giveUpPlayer(
     });
 
     if (unfinished === 0) {
-      await tx.room.update({
-        where: { id: room.id },
+      const roomTransition = await tx.room.updateMany({
+        where: {
+          id: room.id,
+          status: {
+            not: "finished",
+          },
+        },
         data: { status: "finished" },
       });
+
+      if (roomTransition.count > 0) {
+        await archiveRoomById(tx, room.id);
+      }
     }
 
     return {
@@ -591,13 +727,23 @@ export async function restartRoom(
 ): Promise<Room | null> {
   const room = await prisma.room.findUnique({
     where: { roomId },
-    select: { id: true },
+    include: {
+      players: {
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
 
   if (!room) return null;
 
-  await prisma.$transaction([
-    prisma.room.update({
+  const shouldArchive = shouldArchiveRoomBeforeRestart(room as DbRoom);
+
+  await prisma.$transaction(async (tx) => {
+    if (shouldArchive) {
+      await createRoomHistorySnapshot(tx, room as DbRoom);
+    }
+
+    await tx.room.update({
       where: { id: room.id },
       data: {
         status: "waiting",
@@ -605,8 +751,9 @@ export async function restartRoom(
         startPage,
         targetPage,
       },
-    }),
-    prisma.roomPlayer.updateMany({
+    });
+
+    await tx.roomPlayer.updateMany({
       where: { roomId: room.id },
       data: {
         currentPage: startPage,
@@ -618,8 +765,8 @@ export async function restartRoom(
         gaveUp: false,
         finishTime: null,
       },
-    }),
-  ]);
+    });
+  });
 
   const updatedRoom = await fetchRoomWithPlayers(roomId);
   if (!updatedRoom) return null;
