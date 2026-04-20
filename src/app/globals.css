@@ -653,7 +653,7 @@
   clear: both;
 }
 
-/* ── Anti-cheat: text rendered via CSS (unsearchable) ────── */
+/* ── Anti-cheat text render (Windows-only via JS hook) ───── */
 .wiki-content [data-text] {
   display: inline;
   font: inherit;
@@ -667,29 +667,6 @@
 
 .wiki-content [data-text]::before {
   content: attr(data-text);
-}
-
-.wiki-content [data-protected-text] {
-  display: inline;
-  font: inherit;
-  color: inherit;
-  line-height: inherit;
-  letter-spacing: inherit;
-  word-spacing: inherit;
-  white-space: pre-wrap;
-  text-decoration: inherit;
-}
-
-.wiki-content [data-protected-text] > [data-ch] {
-  display: inline;
-  font: inherit;
-  color: inherit;
-  line-height: inherit;
-  white-space: inherit;
-}
-
-.wiki-content [data-protected-text] > [data-ch]::before {
-  content: attr(data-ch);
 }
 
 /* ── Responsive: unstack on small screens ────────────────── */

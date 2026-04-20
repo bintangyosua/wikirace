@@ -29,28 +29,6 @@ function obfuscateForFindInPage(text: string): string {
   return out;
 }
 
-function createProtectedTextElement(
-  text: string,
-  aggressivePerCharacter: boolean,
-): HTMLElement {
-  if (!aggressivePerCharacter) {
-    const span = document.createElement("span");
-    span.setAttribute("data-text", obfuscateForFindInPage(text));
-    return span;
-  }
-
-  const wrapper = document.createElement("span");
-  wrapper.setAttribute("data-protected-text", "1");
-
-  for (const ch of Array.from(text)) {
-    const charSpan = document.createElement("span");
-    charSpan.setAttribute("data-ch", obfuscateForFindInPage(ch));
-    wrapper.appendChild(charSpan);
-  }
-
-  return wrapper;
-}
-
 interface ArticleRendererProps {
   currentPage: string;
   onNavigate: (title: string) => void;
@@ -112,12 +90,13 @@ export function ArticleRenderer({
     }
   }, [article]);
 
-  // Anti-cheat: replace text nodes with CSS-rendered spans (unsearchable by Find in Page)
+  // Anti-cheat for desktop Windows only: render text via CSS attributes.
   useLayoutEffect(() => {
     if (!contentRef.current || !article) return;
-    const isAndroid = /Android/i.test(navigator.userAgent);
 
-    // Mobile Find-in-page may match text from attributes, so strip common searchable attrs.
+    const isWindows = /Windows/i.test(navigator.userAgent);
+    if (!isWindows) return;
+
     for (const el of contentRef.current.querySelectorAll(
       "[title],[aria-label],[alt],[placeholder]",
     )) {
@@ -132,7 +111,6 @@ export function ArticleRenderer({
       NodeFilter.SHOW_TEXT,
     );
 
-    // Collect all text nodes first (can't modify DOM while walking)
     const textNodes: Text[] = [];
     let node: Node | null;
     while ((node = walker.nextNode())) {
@@ -143,17 +121,21 @@ export function ArticleRenderer({
       const text = textNode.textContent;
       if (!text || !text.trim()) continue;
 
-      const protectedElement = createProtectedTextElement(text, isAndroid);
-      textNode.parentNode?.replaceChild(protectedElement, textNode);
+      const span = document.createElement("span");
+      span.setAttribute("data-text", obfuscateForFindInPage(text));
+      textNode.parentNode?.replaceChild(span, textNode);
     }
   }, [article]);
 
-  // Block Ctrl+F / Cmd+F browser search while article is displayed
+  // Block Ctrl+F/Cmd+F on Windows only.
   useEffect(() => {
     if (!article) return;
 
+    const isWindows = /Windows/i.test(navigator.userAgent);
+    if (!isWindows) return;
+
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
       }
     };
