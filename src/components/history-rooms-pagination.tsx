@@ -17,7 +17,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 
 interface ArchivedPlayerSnapshot {
   playerId: string;
@@ -104,6 +103,12 @@ function toPath(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string");
 }
 
+function summarizePath(path: string[]): string {
+  if (path.length === 0) return "No path";
+  if (path.length <= 3) return path.join(" -> ");
+  return `${path[0]} -> ... -> ${path[path.length - 1]} (${path.length} pages)`;
+}
+
 const columns: ColumnDef<HistoryRoomGroupData>[] = [
   {
     accessorKey: "roomCode",
@@ -149,33 +154,30 @@ export function HistoryRoomsPagination({
   const roomRows = table.getRowModel().rows;
   const currentPage = table.getState().pagination.pageIndex + 1;
   const pageCount = table.getPageCount();
+  const fromIndex =
+    table.getState().pagination.pageIndex *
+    table.getState().pagination.pageSize;
+  const toIndex = Math.min(
+    fromIndex + table.getState().pagination.pageSize,
+    rooms.length,
+  );
 
   return (
     <div className="space-y-4">
       <Card className="border-border/50 bg-card/85">
-        <CardHeader className="gap-3">
+        <CardHeader className="gap-2 py-4">
           <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-lg">Archived Rooms</CardTitle>
-            <Badge variant="outline">{rooms.length} room</Badge>
+            <CardTitle className="text-base">Archived Rooms</CardTitle>
+            <Badge variant="outline">{rooms.length} rooms</Badge>
           </div>
           <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
             <span>
-              Showing room{" "}
-              {table.getState().pagination.pageIndex *
-                table.getState().pagination.pageSize +
-                1}
-              -
-              {Math.min(
-                table.getState().pagination.pageIndex *
-                  table.getState().pagination.pageSize +
-                  table.getState().pagination.pageSize,
-                rooms.length,
-              )}
+              Showing {rooms.length === 0 ? 0 : fromIndex + 1}-{toIndex}
             </span>
             <div className="flex items-center gap-2">
-              <span>Rows per page</span>
+              <span>Rows</span>
               <select
-                className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+                className="h-7 rounded-md border border-border bg-background px-2 text-xs"
                 value={table.getState().pagination.pageSize}
                 onChange={(event) => {
                   table.setPageSize(Number(event.target.value));
@@ -203,26 +205,23 @@ export function HistoryRoomsPagination({
 
         return (
           <Card key={roomGroup.roomId} className="border-border/50 bg-card/85">
-            <CardHeader className="gap-3">
+            <CardHeader className="gap-2 py-4">
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-lg">
+                <CardTitle className="text-base">
                   Room {roomGroup.roomCode}
                 </CardTitle>
-                <Badge variant="outline">{roomGroup.games.length} game</Badge>
-                <Badge variant="outline">
-                  {totalPlayers} total player entries
-                </Badge>
+                <Badge variant="outline">{roomGroup.games.length} games</Badge>
+                <Badge variant="outline">{totalPlayers} player entries</Badge>
               </div>
               <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                 <span>Host: {roomGroup.hostId}</span>
-                <span>Latest Archive: {formatDate(latestGame.createdAt)}</span>
+                <span>Latest: {formatDate(latestGame.createdAt)}</span>
               </CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-2 pt-0">
               {roomGroup.games.map((game) => {
                 const snapshot = game.snapshot;
-                const roomSnapshot = snapshot?.room;
                 const players = Array.isArray(snapshot?.players)
                   ? snapshot.players
                   : [];
@@ -236,87 +235,61 @@ export function HistoryRoomsPagination({
                 return (
                   <div
                     key={game.id}
-                    className="rounded-xl border border-border/40 bg-background/70 p-4"
+                    className="rounded-lg border border-border/40 bg-background/70 p-3"
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-base font-semibold">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
+                      <p className="text-sm font-semibold">
                         Game #{game.gameNumber}
                       </p>
                       <Badge variant={statusBadgeVariant(game.status)}>
                         {game.status.toUpperCase()}
                       </Badge>
-                      <Badge variant="outline">{game.playerCount} player</Badge>
+                      <Badge variant="outline">
+                        {game.playerCount} players
+                      </Badge>
+                      <span className="text-muted-foreground">
+                        {game.startPage} to {game.targetPage}
+                      </span>
+                      <span className="text-muted-foreground">
+                        Archived {formatDate(game.createdAt)}
+                      </span>
                     </div>
 
-                    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                      <span>Archived: {formatDate(game.createdAt)}</span>
-                      <span>Start: {game.startPage}</span>
-                      <span>Target: {game.targetPage}</span>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span>Finished: {finishedPlayers}</span>
+                      <span>Give Up: {gaveUpPlayers}</span>
                       <span>
-                        Start Time:{" "}
+                        Active:{" "}
+                        {players.length - finishedPlayers - gaveUpPlayers}
+                      </span>
+                      <span>
+                        Duration:{" "}
                         {game.startTime === null
                           ? "-"
                           : formatElapsed(game.startTime)}
                       </span>
-                      {roomSnapshot?.updatedAt && (
-                        <span>
-                          Last Updated: {formatDate(roomSnapshot.updatedAt)}
-                        </span>
-                      )}
                     </div>
-
-                    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
-                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                          Finished
-                        </p>
-                        <p className="text-lg font-semibold">
-                          {finishedPlayers}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
-                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                          Gave Up
-                        </p>
-                        <p className="text-lg font-semibold">{gaveUpPlayers}</p>
-                      </div>
-                      <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
-                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                          Still Playing
-                        </p>
-                        <p className="text-lg font-semibold">
-                          {players.length - finishedPlayers - gaveUpPlayers}
-                        </p>
-                      </div>
-                      <div className="rounded-lg border border-border/50 bg-muted/30 p-3">
-                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                          Host
-                        </p>
-                        <p className="text-sm font-semibold">{game.hostId}</p>
-                      </div>
-                    </div>
-
-                    <Separator className="my-3" />
 
                     {players.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="mt-2 text-xs text-muted-foreground">
                         No players in this game snapshot.
                       </p>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="mt-2 space-y-1.5">
                         {players.map((player, index) => {
                           const path = toPath(player.path);
-                          const pathLength = path.length;
 
                           return (
                             <div
                               key={`${player.playerId}-${index}`}
-                              className="rounded-lg border border-border/40 bg-muted/20 p-3"
+                              className="rounded-md border border-border/40 bg-muted/20 px-2.5 py-2"
                             >
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="font-semibold">{player.name}</p>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                <p className="font-medium text-foreground">
+                                  {player.name}
+                                </p>
                                 <Badge variant="outline">
-                                  ID: {player.playerId}
+                                  {player.playerId}
                                 </Badge>
                                 {game.hostId === player.playerId && (
                                   <Badge variant="secondary">Host</Badge>
@@ -328,60 +301,16 @@ export function HistoryRoomsPagination({
                                 ) : (
                                   <Badge variant="outline">In Progress</Badge>
                                 )}
-                              </div>
-
-                              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                <span>Current: {player.currentPage}</span>
+                                <span className="text-muted-foreground">
+                                  Page: {player.currentPage}
+                                </span>
                                 <span>Steps: {player.steps}</span>
                                 <span>
-                                  Finish Time:{" "}
-                                  {formatElapsed(player.finishTime)}
+                                  Finish: {formatElapsed(player.finishTime)}
                                 </span>
-                              </div>
-
-                              <div className="mt-3 rounded-lg border border-border/40 bg-background/70 p-3">
-                                <p className="mb-2 text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                                  Path ({pathLength})
-                                </p>
-                                {pathLength === 0 ? (
-                                  <p className="text-sm text-muted-foreground">
-                                    No saved path yet.
-                                  </p>
-                                ) : (
-                                  <div className="flex flex-wrap items-center gap-1.5">
-                                    {path.map((page, pathIndex) => {
-                                      const isFirst = pathIndex === 0;
-                                      const isLast =
-                                        pathIndex === path.length - 1;
-
-                                      return (
-                                        <span
-                                          key={`${player.playerId}-${pathIndex}`}
-                                          className="flex items-center gap-1.5"
-                                        >
-                                          <Badge
-                                            variant={
-                                              isFirst
-                                                ? "secondary"
-                                                : isLast
-                                                  ? "default"
-                                                  : "outline"
-                                            }
-                                            className="max-w-55 truncate"
-                                            title={page}
-                                          >
-                                            {page}
-                                          </Badge>
-                                          {!isLast && (
-                                            <span className="text-muted-foreground/60">
-                                              →
-                                            </span>
-                                          )}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                <span className="truncate text-muted-foreground">
+                                  Path: {summarizePath(path)}
+                                </span>
                               </div>
                             </div>
                           );
@@ -396,8 +325,8 @@ export function HistoryRoomsPagination({
         );
       })}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/85 px-4 py-3">
-        <p className="text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/50 bg-card/85 px-4 py-2.5">
+        <p className="text-xs text-muted-foreground">
           Page {currentPage} of {pageCount}
         </p>
         <div className="flex items-center gap-2">
