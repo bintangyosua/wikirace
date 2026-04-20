@@ -57,7 +57,7 @@ interface GameViewProps {
 
 export function GameView({ roomId }: GameViewProps) {
   const router = useRouter();
-  const { room, connected } = useGameStream(roomId);
+  const { room, connected, applyServerRoom } = useGameStream(roomId);
 
   const [playerId, setPlayerId] = useState<string>(() => {
     if (typeof window === "undefined") return "";
@@ -317,9 +317,14 @@ export function GameView({ roomId }: GameViewProps) {
           body: JSON.stringify({ playerId, page: title }),
         });
 
-        if (!res.ok) {
+        const data = await res.json().catch(() => null);
+
+        if (!res.ok || !data?.room) {
           setOptimisticPage(null);
+          return;
         }
+
+        applyServerRoom(data.room);
       } catch (err) {
         console.error("Navigation failed:", err);
         setOptimisticPage(null);
@@ -328,7 +333,7 @@ export function GameView({ roomId }: GameViewProps) {
         setNavigating(false);
       }
     },
-    [navigating, room, roomId, playerId],
+    [navigating, room, roomId, playerId, applyServerRoom],
   );
 
   const handleGiveUp = useCallback(async () => {
@@ -369,10 +374,15 @@ export function GameView({ roomId }: GameViewProps) {
         body: JSON.stringify({ playerId }),
       });
 
-      if (!res.ok) {
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.room) {
         // Revert optimistic update
         setOptimisticPage(null);
+        return;
       }
+
+      applyServerRoom(data.room);
     } catch (err) {
       console.error("Go back failed:", err);
       setOptimisticPage(null);
@@ -380,7 +390,7 @@ export function GameView({ roomId }: GameViewProps) {
       setOptimisticPage(null);
       setGoingBack(false);
     }
-  }, [goingBack, navigating, room, roomId, playerId]);
+  }, [goingBack, navigating, room, roomId, playerId, applyServerRoom]);
 
   // ── Name Entry (join via link) ────────────────────────────
   if (!room) {

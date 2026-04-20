@@ -236,8 +236,12 @@ export async function updatePlayerNavigation(
     const path = [...player.path, newPage];
     const steps = path.length - 1;
 
-    let updatedPlayer = await tx.roomPlayer.update({
-      where: { id: player.id },
+    const navigationUpdate = await tx.roomPlayer.updateMany({
+      where: {
+        id: player.id,
+        finished: false,
+        updatedAt: player.updatedAt,
+      },
       data: {
         currentPage: newPage,
         path: {
@@ -247,18 +251,50 @@ export async function updatePlayerNavigation(
       },
     });
 
+    if (navigationUpdate.count === 0) {
+      return { ok: false as const };
+    }
+
+    const playerAfterNavigation = await tx.roomPlayer.findUnique({
+      where: { id: player.id },
+    });
+
+    if (!playerAfterNavigation) {
+      return { ok: false as const };
+    }
+
+    let updatedPlayer = playerAfterNavigation;
+
     let finishTime: number | null = null;
 
     if (newPage === room.targetPage && room.startTime !== null) {
       finishTime = now - Number(room.startTime);
 
-      updatedPlayer = await tx.roomPlayer.update({
-        where: { id: player.id },
+      const finishUpdate = await tx.roomPlayer.updateMany({
+        where: {
+          id: player.id,
+          finished: false,
+          updatedAt: updatedPlayer.updatedAt,
+        },
         data: {
           finished: true,
           finishTime: BigInt(finishTime),
         },
       });
+
+      if (finishUpdate.count === 0) {
+        return { ok: false as const };
+      }
+
+      const finishedPlayer = await tx.roomPlayer.findUnique({
+        where: { id: player.id },
+      });
+
+      if (!finishedPlayer) {
+        return { ok: false as const };
+      }
+
+      updatedPlayer = finishedPlayer;
 
       const unfinished = await tx.roomPlayer.count({
         where: {
@@ -340,8 +376,12 @@ export async function goBackPlayer(
     const currentPage = path[path.length - 1];
     const steps = path.length - 1;
 
-    const updatedPlayer = await tx.roomPlayer.update({
-      where: { id: player.id },
+    const goBackUpdate = await tx.roomPlayer.updateMany({
+      where: {
+        id: player.id,
+        finished: false,
+        updatedAt: player.updatedAt,
+      },
       data: {
         currentPage,
         path: {
@@ -350,6 +390,18 @@ export async function goBackPlayer(
         steps,
       },
     });
+
+    if (goBackUpdate.count === 0) {
+      return { ok: false as const };
+    }
+
+    const updatedPlayer = await tx.roomPlayer.findUnique({
+      where: { id: player.id },
+    });
+
+    if (!updatedPlayer) {
+      return { ok: false as const };
+    }
 
     return {
       ok: true as const,

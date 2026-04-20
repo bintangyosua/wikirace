@@ -154,6 +154,10 @@ export function useGameStream(roomId: string) {
     error: null,
   });
 
+  const applyServerRoom = useCallback((room: SerializedRoom) => {
+    dispatch({ type: "SET_ROOM", room });
+  }, []);
+
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
@@ -254,5 +258,8 @@ export function useGameStream(roomId: string) {
     };
   }, [connect]);
 
-  return state;
+  return {
+    ...state,
+    applyServerRoom,
+  };
 }
