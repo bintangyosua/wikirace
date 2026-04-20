@@ -29,6 +29,28 @@ function obfuscateForFindInPage(text: string): string {
   return out;
 }
 
+function createProtectedTextElement(
+  text: string,
+  aggressivePerCharacter: boolean,
+): HTMLElement {
+  if (!aggressivePerCharacter) {
+    const span = document.createElement("span");
+    span.setAttribute("data-text", obfuscateForFindInPage(text));
+    return span;
+  }
+
+  const wrapper = document.createElement("span");
+  wrapper.setAttribute("data-protected-text", "1");
+
+  for (const ch of Array.from(text)) {
+    const charSpan = document.createElement("span");
+    charSpan.setAttribute("data-ch", obfuscateForFindInPage(ch));
+    wrapper.appendChild(charSpan);
+  }
+
+  return wrapper;
+}
+
 interface ArticleRendererProps {
   currentPage: string;
   onNavigate: (title: string) => void;
@@ -93,6 +115,7 @@ export function ArticleRenderer({
   // Anti-cheat: replace text nodes with CSS-rendered spans (unsearchable by Find in Page)
   useLayoutEffect(() => {
     if (!contentRef.current || !article) return;
+    const isAndroid = /Android/i.test(navigator.userAgent);
 
     // Mobile Find-in-page may match text from attributes, so strip common searchable attrs.
     for (const el of contentRef.current.querySelectorAll(
@@ -120,9 +143,8 @@ export function ArticleRenderer({
       const text = textNode.textContent;
       if (!text || !text.trim()) continue;
 
-      const span = document.createElement("span");
-      span.setAttribute("data-text", obfuscateForFindInPage(text));
-      textNode.parentNode?.replaceChild(span, textNode);
+      const protectedElement = createProtectedTextElement(text, isAndroid);
+      textNode.parentNode?.replaceChild(protectedElement, textNode);
     }
   }, [article]);
 
