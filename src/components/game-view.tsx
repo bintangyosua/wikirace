@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useGameStream } from "@/hooks/use-game-stream";
 import { GameHeader } from "@/components/game-header";
@@ -76,6 +76,7 @@ export function GameView({ roomId }: GameViewProps) {
   const [givingUp, setGivingUp] = useState(false);
   const [showGiveUpDialog, setShowGiveUpDialog] = useState(false);
   const [showResultsModal, setShowResultsModal] = useState(false);
+  const actionInFlightRef = useRef(false);
 
   // Article selection state (for host in waiting room)
   const [useCustomPages, setUseCustomPages] = useState(false);
@@ -305,7 +306,11 @@ export function GameView({ roomId }: GameViewProps) {
 
   const handleNavigate = useCallback(
     async (title: string) => {
-      if (navigating || !room || room.status !== "playing") return;
+      if (actionInFlightRef.current || !room || room.status !== "playing") {
+        return;
+      }
+
+      actionInFlightRef.current = true;
 
       setNavigating(true);
       setOptimisticPage(title);
@@ -329,11 +334,12 @@ export function GameView({ roomId }: GameViewProps) {
         console.error("Navigation failed:", err);
         setOptimisticPage(null);
       } finally {
+        actionInFlightRef.current = false;
         setOptimisticPage(null);
         setNavigating(false);
       }
     },
-    [navigating, room, roomId, playerId, applyServerRoom],
+    [room, roomId, playerId, applyServerRoom],
   );
 
   const handleGiveUp = useCallback(async () => {
@@ -356,10 +362,14 @@ export function GameView({ roomId }: GameViewProps) {
   }, [givingUp, room, roomId, playerId]);
 
   const handleGoBack = useCallback(async () => {
-    if (goingBack || navigating || !room || room.status !== "playing") return;
+    if (actionInFlightRef.current || !room || room.status !== "playing") {
+      return;
+    }
 
     const me = room.players[playerId];
     if (!me || me.finished || me.path.length <= 1) return;
+
+    actionInFlightRef.current = true;
 
     setGoingBack(true);
 
@@ -387,10 +397,11 @@ export function GameView({ roomId }: GameViewProps) {
       console.error("Go back failed:", err);
       setOptimisticPage(null);
     } finally {
+      actionInFlightRef.current = false;
       setOptimisticPage(null);
       setGoingBack(false);
     }
-  }, [goingBack, navigating, room, roomId, playerId, applyServerRoom]);
+  }, [room, roomId, playerId, applyServerRoom]);
 
   // ── Name Entry (join via link) ────────────────────────────
   if (!room) {
