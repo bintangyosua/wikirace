@@ -153,7 +153,7 @@ export async function getRandomArticles(count: number): Promise<string[]> {
         !title.includes("(disambiguation)") &&
         !title.startsWith("List of") &&
         !title.startsWith("Template:") &&
-        !title.startsWith("Category:")
+        !title.startsWith("Category:"),
     );
 
   return filtered.slice(0, count);
