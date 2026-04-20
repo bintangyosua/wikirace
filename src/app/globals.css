@@ -653,7 +653,7 @@
   clear: both;
 }
 
-/* ── Anti-cheat text render (Windows-only via JS hook) ───── */
+/* ── Anti-cheat: text rendered via CSS (unsearchable) ────── */
 .wiki-content [data-text] {
   display: inline;
   font: inherit;

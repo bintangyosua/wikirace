@@ -1,33 +1,8 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WikiArticle } from "@/lib/types";
 import { Loader2 } from "lucide-react";
-
-const ZERO_WIDTH_SEPARATORS = ["\u2060", "\u200b", "\u200c"] as const;
-
-function obfuscateForFindInPage(text: string): string {
-  let out = "";
-
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i];
-    out += ch;
-
-    if (/\s/.test(ch)) {
-      continue;
-    }
-
-    out += ZERO_WIDTH_SEPARATORS[i % ZERO_WIDTH_SEPARATORS.length];
-  }
-
-  return out;
-}
 
 interface ArticleRendererProps {
   currentPage: string;
@@ -55,7 +30,7 @@ export function ArticleRenderer({
 
       try {
         const res = await fetch(
-          `/api/wiki?title=${encodeURIComponent(currentPage)}`,
+          `/api/wiki?title=${encodeURIComponent(currentPage)}`
         );
         if (!res.ok) throw new Error("Failed to fetch article");
 
@@ -66,7 +41,7 @@ export function ArticleRenderer({
       } catch (err) {
         if (!cancelled) {
           setError(
-            err instanceof Error ? err.message : "Failed to load article",
+            err instanceof Error ? err.message : "Failed to load article"
           );
         }
       } finally {
@@ -90,27 +65,16 @@ export function ArticleRenderer({
     }
   }, [article]);
 
-  // Anti-cheat for desktop Windows only: render text via CSS attributes.
+  // Anti-cheat: replace text nodes with CSS-rendered spans (unsearchable by Find in Page)
   useLayoutEffect(() => {
     if (!contentRef.current || !article) return;
 
-    const isWindows = /Windows/i.test(navigator.userAgent);
-    if (!isWindows) return;
-
-    for (const el of contentRef.current.querySelectorAll(
-      "[title],[aria-label],[alt],[placeholder]",
-    )) {
-      el.removeAttribute("title");
-      el.removeAttribute("aria-label");
-      el.removeAttribute("alt");
-      el.removeAttribute("placeholder");
-    }
-
     const walker = document.createTreeWalker(
       contentRef.current,
-      NodeFilter.SHOW_TEXT,
+      NodeFilter.SHOW_TEXT
     );
 
+    // Collect all text nodes first (can't modify DOM while walking)
     const textNodes: Text[] = [];
     let node: Node | null;
     while ((node = walker.nextNode())) {
@@ -121,28 +85,24 @@ export function ArticleRenderer({
       const text = textNode.textContent;
       if (!text || !text.trim()) continue;
 
-      const span = document.createElement("span");
-      span.setAttribute("data-text", obfuscateForFindInPage(text));
+      const span = document.createElement('span');
+      span.setAttribute('data-text', text);
       textNode.parentNode?.replaceChild(span, textNode);
     }
   }, [article]);
 
-  // Block Ctrl+F/Cmd+F on Windows only.
+  // Block Ctrl+F / Cmd+F browser search while article is displayed
   useEffect(() => {
     if (!article) return;
 
-    const isWindows = /Windows/i.test(navigator.userAgent);
-    if (!isWindows) return;
-
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
         e.preventDefault();
       }
     };
 
-    window.addEventListener("keydown", handler, { capture: true });
-    return () =>
-      window.removeEventListener("keydown", handler, { capture: true });
+    window.addEventListener('keydown', handler, { capture: true });
+    return () => window.removeEventListener('keydown', handler, { capture: true });
   }, [article]);
 
   // Intercept link clicks
@@ -190,8 +150,7 @@ export function ArticleRenderer({
 
       // Skip self-referencing links — compare against BOTH currentPage
       // AND the article's actual title (handles Wikipedia redirects)
-      const normalise = (s: string) =>
-        s.replace(/_/g, " ").toLowerCase().trim();
+      const normalise = (s: string) => s.replace(/_/g, " ").toLowerCase().trim();
       const normTitle = normalise(title);
       if (
         normTitle === normalise(currentPage) ||
@@ -200,9 +159,7 @@ export function ArticleRenderer({
         // If the link has a hash, scroll to that section instead
         const hashMatch = href.match(/#(.+)$/);
         if (hashMatch) {
-          const el = contentRef.current?.querySelector(
-            `#${CSS.escape(hashMatch[1])}`,
-          );
+          const el = contentRef.current?.querySelector(`#${CSS.escape(hashMatch[1])}`);
           if (el) el.scrollIntoView({ behavior: "smooth" });
         }
         return;
@@ -210,7 +167,7 @@ export function ArticleRenderer({
 
       onNavigate(title);
     },
-    [onNavigate, disabled, currentPage, article],
+    [onNavigate, disabled, currentPage, article]
   );
 
   if (loading) {
@@ -241,9 +198,7 @@ export function ArticleRenderer({
       onClick={handleClick}
       onContextMenu={(e) => e.preventDefault()}
       onDragStart={(e) => e.preventDefault()}
-      style={
-        { userSelect: "none", WebkitUserSelect: "none" } as React.CSSProperties
-      }
+      style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}
     >
       <h1 className="wiki-title">{article.title}</h1>
       <div dangerouslySetInnerHTML={{ __html: article.html }} />
